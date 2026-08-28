@@ -20,6 +20,20 @@ const OVERFLOW_PADDING = 120;
 const MAX_RENDER_CACHE_SIZE = 100;
 const MAX_IMAGE_CACHE_SIZE = 50;
 
+/** Resolve the composable linked-copy transform, including older saved modes. */
+function getLinkedCopyTransform(element) {
+  const hasHorizontal = Object.prototype.hasOwnProperty.call(element, 'linkedFlipHorizontal');
+  const hasVertical = Object.prototype.hasOwnProperty.call(element, 'linkedFlipVertical');
+  return {
+    horizontal: hasHorizontal
+      ? element.linkedFlipHorizontal === true
+      : element.mirrorAxis === 'y' || element.mirrorAxis === 'flip-horizontal',
+    vertical: hasVertical
+      ? element.linkedFlipVertical === true
+      : element.mirrorAxis === 'x' || element.mirrorAxis === 'flip-vertical',
+  };
+}
+
 /**
  * Canvas renderer class
  */
@@ -617,6 +631,18 @@ export class CanvasRenderer {
       }
     }
 
+    // Mirrored children are normal printable elements. This dashed outline is
+    // deliberately drawn only in the editor (never by renderAllToContext).
+    if (!this.ditherPreview) {
+      for (const element of elements) {
+        if (!element.mirrorSourceId) continue;
+        const indicatorElement = this.multiLabel.enabled
+          ? this.getOffsetElement(element)
+          : element;
+        this.drawMirrorIndicator(indicatorElement, selectedArray.includes(element.id));
+      }
+    }
+
     // Draw alignment guides (after elements, before handles)
     this.drawAlignmentGuides(alignmentGuides);
 
@@ -640,7 +666,7 @@ export class CanvasRenderer {
           if (bounds) {
             drawGroupHandles(ctx, bounds);
           }
-        } else {
+        } else if (!selected.mirrorSourceId) {
           // Single ungrouped element
           drawHandles(ctx, handleElement);
         }
@@ -757,6 +783,55 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    ctx.restore();
+  }
+
+  /**
+   * Draw an editor-only marker around a linked mirrored child.
+   */
+  drawMirrorIndicator(element, selected = false) {
+    const { x, y, width, height, rotation = 0 } = element;
+    const ctx = this.ctx;
+    const padding = 3 / this.zoom;
+    const transform = getLinkedCopyTransform(element);
+
+    ctx.save();
+    ctx.translate(x + width / 2, y + height / 2);
+    if (rotation) ctx.rotate((rotation * Math.PI) / 180);
+
+    ctx.globalAlpha = selected ? 1 : 0.82;
+    ctx.strokeStyle = '#7c3aed';
+    ctx.lineWidth = (selected ? 2 : 1.5) / this.zoom;
+    ctx.setLineDash([5 / this.zoom, 3 / this.zoom]);
+    ctx.strokeRect(
+      -width / 2 - padding,
+      -height / 2 - padding,
+      width + padding * 2,
+      height + padding * 2
+    );
+
+    const label = transform.horizontal && transform.vertical
+      ? '180°'
+      : transform.horizontal
+        ? 'F·H'
+        : transform.vertical
+          ? 'F·V'
+          : 'LINK';
+    const fontSize = 9 / this.zoom;
+    const labelHeight = 14 / this.zoom;
+    const labelWidth = 30 / this.zoom;
+    const labelX = -width / 2 - padding;
+    const labelY = -height / 2 - padding - labelHeight;
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#7c3aed';
+    ctx.beginPath();
+    ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 3 / this.zoom);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `600 ${fontSize}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
     ctx.restore();
   }
 
@@ -878,6 +953,18 @@ export class CanvasRenderer {
     // Apply rotation
     if (rotation) {
       this.ctx.rotate((rotation * Math.PI) / 180);
+    }
+
+    // A linked child keeps the source's element bounds and rotation, then
+    // applies its independently composable transform around its local center.
+    if (element.mirrorSourceId) {
+      const transform = getLinkedCopyTransform(element);
+      if (transform.horizontal || transform.vertical) {
+        this.ctx.scale(
+          transform.horizontal ? -1 : 1,
+          transform.vertical ? -1 : 1
+        );
+      }
     }
 
     // Render based on type

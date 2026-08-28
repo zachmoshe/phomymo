@@ -1,10 +1,10 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v117
+ * v162
  */
 
-import { CanvasRenderer } from './canvas.js?v=117';
+import { CanvasRenderer } from './canvas.js?v=119';
 import { BLETransport } from './ble.js?v=103';
 import { USBTransport } from './usb.js?v=101';
 import { print, printDensityTest, isDSeriesPrinter, isP12Printer, isA30Printer, isTapePrinter, isPM241Printer, isTSPLPrinter, isRotatedPrinter, getPrinterWidthBytes, getPrinterDpi, getPrinterAlignment, getPrinterDescription, isDeviceRecognized, getMatchedPattern, loadPrinterDefinitions, getAllPrinterDefinitions, getPrinterDefinition, getCustomPrinterDefinitions, saveCustomPrinterDefinition, deleteCustomPrinterDefinition, isBuiltinPrinter, resetBuiltinPrinter, getAvailableProtocols, getAvailableLabelPresets, getDetectedDefinition } from './printer.js?v=128';
@@ -14,6 +14,10 @@ import {
   createBarcodeElement,
   createQRElement,
   createShapeElement,
+  createMirroredElement,
+  getMirroredChild,
+  normalizeLinkedCopyLayout,
+  synchronizeMirroredElements,
   updateElement,
   deleteElement,
   duplicateElement,
@@ -36,7 +40,7 @@ import {
   collapseToSingleZone,
   hasElementsInHigherZones,
   removeElementsInHigherZones,
-} from './elements.js?v=103';
+} from './elements.js?v=105';
 import {
   HandleType,
   getHandleAtPoint,
@@ -54,7 +58,7 @@ import {
   loadDesign,
   listDesigns,
   deleteDesign,
-} from './storage.js?v=102';
+} from './storage.js?v=103';
 import {
   extractFields,
   hasTemplateFields,
@@ -1297,11 +1301,30 @@ function zoomToFitIfNeeded() {
  * Render the canvas
  */
 function render() {
+  synchronizeMirrors();
   // In print preview mode, evaluate expressions so users see actual values
   const elementsToRender = state.ditherPreview
     ? evaluateExpressions(state.elements)
     : state.elements;
   state.renderer.renderAll(elementsToRender, state.selectedIds, state.alignmentGuides);
+}
+
+/**
+ * Keep linked mirror contents current after every mutation path, including
+ * group transforms, undo/redo, imports, and older saved designs.
+ */
+function synchronizeMirrors() {
+  const previous = state.elements;
+  const next = synchronizeMirroredElements(previous);
+  if (next === previous) return;
+
+  const previousById = new Map(previous.map(element => [element.id, element]));
+  for (const element of next) {
+    if (previousById.get(element.id) !== element) {
+      state.renderer?.clearCache(element.id);
+    }
+  }
+  state.elements = next;
 }
 
 /**
@@ -2386,7 +2409,29 @@ function deselect() {
  * Update element and re-render
  */
 function modifyElement(id, changes) {
+  const element = state.elements.find(item => item.id === id);
+  if (!element) return;
+
+  // A linked copy owns only placement, grouping, and its local transform. Its
+  // appearance and dimensions always come from the source.
+  if (element.mirrorSourceId) {
+    const independentKeys = new Set([
+      'x',
+      'y',
+      'zone',
+      'groupId',
+      'linkedCopyLayout',
+      'linkedFlipHorizontal',
+      'linkedFlipVertical',
+    ]);
+    changes = Object.fromEntries(
+      Object.entries(changes).filter(([key]) => independentKeys.has(key))
+    );
+    if (Object.keys(changes).length === 0) return;
+  }
+
   state.elements = updateElement(state.elements, id, changes);
+  synchronizeMirrors();
 
   // Only clear cache if content or size changed (not just position/rotation)
   const contentKeys = ['width', 'height', 'text', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textDecoration', 'background', 'noWrap', 'clipOverflow', 'autoScale', 'verticalAlign', 'imageData', 'barcodeData', 'barcodeFormat', 'qrData', 'brightness', 'contrast', 'dither', 'showText', 'textFontSize', 'textBold', 'shapeType', 'fill', 'stroke', 'strokeWidth', 'strokeDash', 'cornerRadius', 'nonPrintable'];
@@ -2409,12 +2454,183 @@ function modifyElement(id, changes) {
 }
 
 /**
+ * Create the selected source's linked copy and select it so the user can
+ * immediately position and transform it.
+ */
+function createMirrorForSelected(layoutOverride = null) {
+  const source = getSelected();
+  if (!source || source.mirrorSourceId) return;
+
+  const requestedLayout = typeof layoutOverride === 'string'
+    ? layoutOverride
+    : $('#prop-mirror-layout')?.value;
+  const layout = normalizeLinkedCopyLayout(requestedLayout);
+  saveHistory();
+  state.elements = createMirroredElement(state.elements, source.id, layout);
+  synchronizeMirrors();
+
+  // Creation should never strand the copy in the gray overflow area. Prefer
+  // the requested side of the source, then fall back to the opposite edge of
+  // the current label zone while keeping the entire copy visible.
+  let child = getMirroredChild(state.elements, source.id);
+  if (child) {
+    const labelWidthMm = state.multiLabel.enabled
+      ? state.multiLabel.labelWidth
+      : state.labelSize.width;
+    const labelHeightMm = state.multiLabel.enabled
+      ? state.multiLabel.labelHeight
+      : state.labelSize.height;
+    const labelWidth = labelWidthMm * PX_PER_MM;
+    const labelHeight = labelHeightMm * PX_PER_MM;
+    const gap = 12;
+    const maxX = Math.max(0, labelWidth - child.width);
+    const maxY = Math.max(0, labelHeight - child.height);
+    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+    const horizontalLayout = layout === 'horizontal';
+
+    let x = clamp(source.x, 0, maxX);
+    let y = clamp(source.y, 0, maxY);
+    let sourceX = source.x;
+    let sourceY = source.y;
+    if (horizontalLayout) {
+      const right = source.x + source.width + gap;
+      const left = source.x - child.width - gap;
+      if (right <= maxX) {
+        x = right;
+      } else if (left >= 0) {
+        x = left;
+      } else if (source.width + gap + child.width <= labelWidth) {
+        const pairWidth = source.width + gap + child.width;
+        const start = clamp(source.x + source.width / 2 - pairWidth / 2, 0, labelWidth - pairWidth);
+        sourceX = start;
+        x = start + source.width + gap;
+      } else {
+        x = source.x + source.width / 2 <= labelWidth / 2 ? maxX : 0;
+      }
+    } else {
+      const below = source.y + source.height + gap;
+      const above = source.y - child.height - gap;
+      if (below <= maxY) {
+        y = below;
+      } else if (above >= 0) {
+        y = above;
+      } else if (source.height + gap + child.height <= labelHeight) {
+        const pairHeight = source.height + gap + child.height;
+        const start = clamp(source.y + source.height / 2 - pairHeight / 2, 0, labelHeight - pairHeight);
+        sourceY = start;
+        y = start + source.height + gap;
+      } else {
+        y = source.y + source.height / 2 <= labelHeight / 2 ? maxY : 0;
+      }
+    }
+    if (sourceX !== source.x || sourceY !== source.y) {
+      state.elements = updateElement(state.elements, source.id, { x: sourceX, y: sourceY });
+    }
+    state.elements = updateElement(state.elements, child.id, { x, y });
+  }
+  autoCloneIfEnabled();
+
+  child = getMirroredChild(state.elements, source.id);
+  if (!child) return;
+  state.renderer.clearCache(child.id);
+  selectElement(child.id);
+  setStatus(`Linked copy created ${layout === 'horizontal' ? 'beside' : 'above or below'} the original`);
+}
+
+/** Apply a composable local transform to a linked copy. */
+function transformSelectedLinkedCopy(action) {
+  const selected = getSelected();
+  if (!selected) return;
+
+  const child = selected.mirrorSourceId
+    ? selected
+    : getMirroredChild(state.elements, selected.id);
+  if (!child) return;
+
+  let horizontal = child.linkedFlipHorizontal === true;
+  let vertical = child.linkedFlipVertical === true;
+  switch (action) {
+    case 'horizontal':
+      horizontal = !horizontal;
+      break;
+    case 'vertical':
+      vertical = !vertical;
+      break;
+    case 'rotate-180':
+      horizontal = !horizontal;
+      vertical = !vertical;
+      break;
+    case 'reset':
+      horizontal = false;
+      vertical = false;
+      break;
+    default:
+      return;
+  }
+
+  if (horizontal === child.linkedFlipHorizontal && vertical === child.linkedFlipVertical) return;
+
+  saveHistory();
+  modifyElement(child.id, {
+    linkedFlipHorizontal: horizontal,
+    linkedFlipVertical: vertical,
+  });
+  setStatus(action === 'reset' ? 'Linked-copy transform reset' : 'Linked-copy transform updated');
+}
+
+/** Reflect the selected linked copy's transform state in the desktop buttons. */
+function updateLinkedTransformButtons(element) {
+  const horizontal = element?.linkedFlipHorizontal === true;
+  const vertical = element?.linkedFlipVertical === true;
+  const badge = $('#prop-linked-transform-badge');
+  if (badge) badge.textContent = getLinkedTransformBadge(element);
+  const states = {
+    '#prop-linked-flip-horizontal': horizontal,
+    '#prop-linked-flip-vertical': vertical,
+    '#prop-linked-rotate-180': horizontal && vertical,
+  };
+  for (const [selector, active] of Object.entries(states)) {
+    const button = $(selector);
+    if (button) button.setAttribute('aria-pressed', String(active));
+  }
+}
+
+/** Remove a linked child while keeping its original element. */
+function removeSelectedMirror() {
+  const selected = getSelected();
+  if (!selected) return;
+
+  const child = selected.mirrorSourceId
+    ? selected
+    : getMirroredChild(state.elements, selected.id);
+  if (!child) return;
+
+  const sourceId = child.mirrorSourceId;
+  saveHistory();
+  state.renderer.clearCache(child.id);
+  state.elements = deleteElement(state.elements, child.id);
+  autoCloneIfEnabled();
+
+  if (state.elements.some(element => element.id === sourceId)) {
+    selectElement(sourceId);
+  } else {
+    deselect();
+  }
+  setStatus('Linked copy removed');
+}
+
+/**
  * Start inline editing of a text element
  * Shows a textarea overlay positioned over the element
  */
 function startInlineEdit(elementId) {
   const element = state.elements.find(e => e.id === elementId);
   if (!element || element.type !== 'text') return;
+  if (element.mirrorSourceId) {
+    selectElement(element.mirrorSourceId);
+    setStatus('Edit the original; its mirror updates automatically');
+    return;
+  }
 
   // Save history before editing starts (for undo)
   saveHistory();
@@ -2546,6 +2762,14 @@ function updatePropertiesPanel() {
   $('#prop-rotation').value = Math.round(element.rotation || 0);
   $('#prop-non-printable').checked = element.nonPrintable === true;
 
+  const isMirrorChild = !!element.mirrorSourceId;
+  $('#prop-x').disabled = false;
+  $('#prop-y').disabled = false;
+  $('#prop-width').disabled = isMirrorChild;
+  $('#prop-height').disabled = isMirrorChild;
+  $('#prop-rotation').disabled = isMirrorChild;
+  $('#prop-non-printable').disabled = isMirrorChild;
+
   // Update layer number (1-indexed for display, position in array determines z-order)
   const layerIndex = state.elements.findIndex(el => el.id === element.id);
   $('#prop-layer').textContent = layerIndex + 1;
@@ -2557,6 +2781,28 @@ function updatePropertiesPanel() {
   $('#props-barcode').classList.add('hidden');
   $('#props-qr').classList.add('hidden');
   $('#props-shape').classList.add('hidden');
+
+  // Configure the relationship controls. A source can own one linked copy;
+  // the child exposes placement and composable transforms because all visual
+  // properties are inherited.
+  const mirrorSourceControls = $('#prop-mirror-source-controls');
+  const mirrorChildControls = $('#prop-mirror-child-controls');
+  mirrorSourceControls.classList.toggle('hidden', isMirrorChild);
+  mirrorChildControls.classList.toggle('hidden', !isMirrorChild);
+
+  if (isMirrorChild) {
+    updateLinkedTransformButtons(element);
+    updateMobileUI();
+    return;
+  }
+
+  const mirroredChild = getMirroredChild(state.elements, element.id);
+  const hasMirroredChild = !!mirroredChild;
+  $('#prop-mirror-layout').value = normalizeLinkedCopyLayout(mirroredChild?.linkedCopyLayout);
+  $('#prop-mirror-layout-control').classList.toggle('hidden', hasMirroredChild);
+  $('#prop-create-mirror').classList.toggle('hidden', hasMirroredChild);
+  $('#prop-existing-mirror-actions').classList.toggle('hidden', !hasMirroredChild);
+  $('#prop-mirror-status').classList.toggle('hidden', !hasMirroredChild);
 
   // Show and populate type-specific panel
   switch (element.type) {
@@ -3307,7 +3553,7 @@ function handleCanvasMouseDown(e) {
   // Single element: check individual handles
   if (state.selectedIds.length === 1) {
     const selected = selectedElements[0];
-    if (selected) {
+    if (selected && !selected.mirrorSourceId) {
       // Get element with canvas-adjusted position for handle detection
       const adjustedElement = getElementWithCanvasPos(selected);
       const handle = getHandleAtPoint(pos.x, pos.y, adjustedElement);
@@ -3547,7 +3793,7 @@ function handleCanvasMouseMove(e) {
   // Check single element handles
   if (state.selectedIds.length === 1) {
     const selected = selectedElements[0];
-    if (selected) {
+    if (selected && !selected.mirrorSourceId) {
       const adjustedElement = getElementWithCanvasPos(selected);
       const handle = getHandleAtPoint(pos.x, pos.y, adjustedElement);
       if (handle) {
@@ -3892,7 +4138,7 @@ function handleCanvasPointerDown(e) {
   // Single element: check individual handles
   if (state.selectedIds.length === 1) {
     const selected = selectedElements[0];
-    if (selected) {
+    if (selected && !selected.mirrorSourceId) {
       const adjustedElement = getElementWithCanvasPos(selected);
       const handle = getHandleAtPoint(pos.x, pos.y, adjustedElement, e.pointerType === 'touch');
       if (handle) {
@@ -4152,7 +4398,7 @@ function handleCanvasPointerMove(e) {
 
     if (state.selectedIds.length === 1) {
       const selected = selectedElements[0];
-      if (selected) {
+      if (selected && !selected.mirrorSourceId) {
         const adjustedElement = getElementWithCanvasPos(selected);
         const handle = getHandleAtPoint(pos.x, pos.y, adjustedElement, false);
         if (handle) {
@@ -4352,7 +4598,7 @@ function handleCanvasTouchStart(e) {
   // Single element handles
   if (state.selectedIds.length === 1) {
     const selected = selectedElements[0];
-    if (selected) {
+    if (selected && !selected.mirrorSourceId) {
       const adjustedElement = getElementWithCanvasPos(selected);
       const handle = getHandleAtPoint(pos.x, pos.y, adjustedElement, true);
       if (handle) {
@@ -5164,6 +5410,7 @@ function handleSave() {
   const name = nameValidation.sanitized;
 
   try {
+    synchronizeMirrors();
     const designData = {
       elements: state.elements,
       labelSize: state.labelSize,
@@ -5283,10 +5530,12 @@ function handleExport() {
     return;
   }
 
+  synchronizeMirrors();
+
   // Build export data
   const exportData = {
     name: 'Untitled Design',
-    version: 5, // Version 5 includes an explicit template data column schema
+    version: 6, // Version 6 supports linked mirrored elements
     elements: state.elements,
     labelSize: state.labelSize,
     exportedAt: new Date().toISOString(),
@@ -5523,6 +5772,7 @@ function updateElementsList() {
         <span class="text-gray-400 text-xs w-4">${layerNum}</span>
         ${icon}
         <span class="flex-1 truncate">${escapeHtml(label)}</span>
+        ${el.mirrorSourceId ? `<span class="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-purple-700" title="Linked copy">${getLinkedTransformBadge(el)}</span>` : ''}
         ${el.nonPrintable ? '<span class="text-[10px] font-medium text-amber-600" title="Non-printable template guide">Guide</span>' : ''}
         ${el.groupId ? '<span class="text-xs text-gray-400">G</span>' : ''}
       </button>
@@ -5539,6 +5789,15 @@ function updateElementsList() {
       $('#elements-dropdown').classList.add('hidden');
     });
   });
+}
+
+function getLinkedTransformBadge(element) {
+  const horizontal = element?.linkedFlipHorizontal === true;
+  const vertical = element?.linkedFlipVertical === true;
+  if (horizontal && vertical) return '180°';
+  if (horizontal) return 'F·H';
+  if (vertical) return 'F·V';
+  return 'Link';
 }
 
 /**
@@ -5906,8 +6165,14 @@ function pasteElements() {
     clone.x += 10;
     clone.y += 10;
     clone.zone = state.activeZone; // Paste to active zone
-    // Clear group id on paste
+    // Pasted elements are independent; do not leave links pointing back to
+    // elements in the original design selection.
     delete clone.groupId;
+    delete clone.mirrorSourceId;
+    delete clone.linkedCopyLayout;
+    delete clone.linkedFlipHorizontal;
+    delete clone.linkedFlipVertical;
+    delete clone.mirrorAxis;
     return clone;
   });
 
@@ -6424,10 +6689,25 @@ function populateMobileProps() {
     barcode: 'Barcode',
     qr: 'QR Code',
   };
-  title.textContent = typeNames[selected.type] || 'Properties';
+  const isMirrorChild = !!selected.mirrorSourceId;
+  title.textContent = isMirrorChild
+    ? `Linked ${typeNames[selected.type] || 'Element'}`
+    : (typeNames[selected.type] || 'Properties');
 
   // Generate properties form
   let html = '<div class="space-y-4">';
+
+  if (isMirrorChild) {
+    html += `
+      <div class="rounded-xl border border-purple-200 bg-purple-50 p-3 text-purple-950">
+        <div class="mb-1 flex items-center justify-between gap-2">
+          <span class="text-sm font-semibold">Linked copy</span>
+          <span class="rounded-full bg-purple-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-800">${getLinkedTransformBadge(selected)}</span>
+        </div>
+        <p class="text-xs leading-relaxed text-purple-700">Move this copy freely. Its content, style, size, and rotation follow the original.</p>
+      </div>
+    `;
+  }
 
   // Helper to generate field dropdown HTML
   const fieldDropdownHtml = (inputId) => {
@@ -6446,7 +6726,7 @@ function populateMobileProps() {
   };
 
   // Type-specific properties FIRST (content is most important on mobile)
-  if (selected.type === 'text') {
+  if (!isMirrorChild && selected.type === 'text') {
     const fontFamily = selected.fontFamily || 'Inter, sans-serif';
     const vAlign = selected.verticalAlign || 'middle';
     const textColor = selected.color || 'black';
@@ -6569,7 +6849,7 @@ function populateMobileProps() {
         </div>
       </div>
     `;
-  } else if (selected.type === 'barcode') {
+  } else if (!isMirrorChild && selected.type === 'barcode') {
     html += `
       <div class="prop-group">
         <div class="flex items-center justify-between mb-1">
@@ -6613,7 +6893,7 @@ function populateMobileProps() {
         </div>
       </div>
     `;
-  } else if (selected.type === 'qr') {
+  } else if (!isMirrorChild && selected.type === 'qr') {
     html += `
       <div class="prop-group">
         <div class="flex items-center justify-between mb-1">
@@ -6629,7 +6909,7 @@ function populateMobileProps() {
         <textarea id="mobile-prop-value" class="prop-input" rows="3">${escapeHtml(selected.value || selected.qrData || '')}</textarea>
       </div>
     `;
-  } else if (selected.type === 'shape') {
+  } else if (!isMirrorChild && selected.type === 'shape') {
     const shapeType = selected.shapeType || 'rectangle';
     let fillValue = selected.fill || 'black';
     if (fillValue === 'dither-light') fillValue = 'dither-25';
@@ -6714,7 +6994,7 @@ function populateMobileProps() {
       </div>
       ` : ''}
     `;
-  } else if (selected.type === 'image') {
+  } else if (!isMirrorChild && selected.type === 'image') {
     const scaleW = selected.naturalWidth ? (selected.width / selected.naturalWidth) * 100 : 100;
     const scaleH = selected.naturalHeight ? (selected.height / selected.naturalHeight) * 100 : 100;
     const currentScale = Math.round(Math.max(scaleW, scaleH));
@@ -6749,10 +7029,50 @@ function populateMobileProps() {
     `;
   }
 
-  // Position/Size/Rotation section (collapsible, at bottom)
+  // Mirror relationship and position controls (at bottom)
+  const existingMobileMirror = isMirrorChild
+    ? selected
+    : getMirroredChild(state.elements, selected.id);
+  const mobileFlipHorizontal = existingMobileMirror?.linkedFlipHorizontal === true;
+  const mobileFlipVertical = existingMobileMirror?.linkedFlipVertical === true;
+  const mobileTransformClass = (active) => `linked-transform-button rounded-lg border border-purple-300 px-3 py-2 text-sm font-medium ${active ? 'bg-purple-600 text-white' : 'bg-white text-purple-700'}`;
   html += `
     <div class="border-t border-gray-200 pt-4 mt-4">
-      <label class="flex items-center gap-2 mb-4 rounded bg-amber-50 px-3 py-2 text-amber-900">
+      <div class="mb-4 rounded-xl border border-purple-200 bg-purple-50 p-3">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <div class="prop-label mb-0 text-purple-700">Linked copy</div>
+          ${existingMobileMirror ? `<span class="rounded-full bg-purple-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-800">${getLinkedTransformBadge(existingMobileMirror)}</span>` : ''}
+        </div>
+        ${isMirrorChild ? `
+          <p class="mb-2 text-xs leading-relaxed text-purple-600">Combine these controls freely. Flip H and Flip V together are the same as Rotate 180°.</p>
+          <div class="mb-2 grid grid-cols-2 gap-2">
+            <button data-mobile-linked-transform="horizontal" aria-pressed="${mobileFlipHorizontal}" class="${mobileTransformClass(mobileFlipHorizontal)}">Flip H</button>
+            <button data-mobile-linked-transform="vertical" aria-pressed="${mobileFlipVertical}" class="${mobileTransformClass(mobileFlipVertical)}">Flip V</button>
+            <button data-mobile-linked-transform="rotate-180" aria-pressed="${mobileFlipHorizontal && mobileFlipVertical}" class="${mobileTransformClass(mobileFlipHorizontal && mobileFlipVertical)}">Rotate 180°</button>
+            <button data-mobile-linked-transform="reset" class="${mobileTransformClass(false)}">Reset</button>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="mobile-select-mirror-source" class="rounded-lg border border-purple-300 bg-white px-3 py-2 text-sm font-medium text-purple-700">Select original</button>
+            <button id="mobile-remove-mirror" class="rounded-lg border border-purple-300 bg-white px-3 py-2 text-sm font-medium text-purple-700">Remove copy</button>
+          </div>
+        ` : existingMobileMirror ? `
+          <div class="grid grid-cols-2 gap-2">
+            <button id="mobile-select-mirror" class="rounded-lg border border-purple-300 bg-white px-3 py-2 text-sm font-medium text-purple-700">Select copy</button>
+            <button id="mobile-remove-mirror" class="rounded-lg border border-purple-300 bg-white px-3 py-2 text-sm font-medium text-purple-700">Remove copy</button>
+          </div>
+        ` : `
+          <label class="mb-2 block text-xs text-purple-700">
+            <span class="mb-1 block font-medium">Initial placement</span>
+            <select id="mobile-prop-mirror-layout" class="prop-input">
+              <option value="horizontal">Beside original</option>
+              <option value="vertical">Above or below original</option>
+            </select>
+          </label>
+          <p class="mb-2 text-xs leading-relaxed text-purple-600">The copy starts unchanged. Transform it after creation.</p>
+          <button id="mobile-create-mirror" class="w-full rounded-lg bg-purple-600 px-3 py-2 text-sm font-medium text-white">Create linked copy</button>
+        `}
+      </div>
+      <label class="${isMirrorChild ? 'hidden ' : ''}flex items-center gap-2 mb-4 rounded bg-amber-50 px-3 py-2 text-amber-900">
         <input type="checkbox" id="mobile-prop-nonPrintable" class="w-5 h-5 rounded border-amber-300 text-amber-600" ${selected.nonPrintable ? 'checked' : ''}>
         <span><span class="text-sm font-medium">Non-printable</span><span class="block text-xs text-amber-700">Visible as a 50% template guide</span></span>
       </label>
@@ -6782,11 +7102,11 @@ function populateMobileProps() {
         <div class="prop-row">
           <div class="flex-1">
             <label class="text-xs text-gray-500">Width (<span class="mobile-prop-unit">${state.measurementUnit}</span>)</label>
-            <input type="number" id="mobile-prop-width" class="prop-input" value="${formatMeasurement(selected.width)}">
+            <input type="number" id="mobile-prop-width" class="prop-input" value="${formatMeasurement(selected.width)}" ${isMirrorChild ? 'disabled' : ''}>
           </div>
           <div class="flex-1">
             <label class="text-xs text-gray-500">Height (<span class="mobile-prop-unit">${state.measurementUnit}</span>)</label>
-            <input type="number" id="mobile-prop-height" class="prop-input" value="${formatMeasurement(selected.height)}">
+            <input type="number" id="mobile-prop-height" class="prop-input" value="${formatMeasurement(selected.height)}" ${isMirrorChild ? 'disabled' : ''}>
           </div>
         </div>
       </div>
@@ -6794,7 +7114,7 @@ function populateMobileProps() {
         <div class="prop-row">
           <div class="flex-1">
             <label class="text-xs text-gray-500">Rotation</label>
-            <input type="number" id="mobile-prop-rotation" class="prop-input" value="${selected.rotation || 0}" min="0" max="360">
+            <input type="number" id="mobile-prop-rotation" class="prop-input" value="${selected.rotation || 0}" min="0" max="360" ${isMirrorChild ? 'disabled' : ''}>
           </div>
           <div class="flex-1"></div>
         </div>
@@ -6838,6 +7158,30 @@ function wireUpMobilePropHandlers(element) {
     saveHistory();
     updatePropertiesPanel(); // Sync desktop panel on blur
   };
+
+  $('#mobile-create-mirror')?.addEventListener('click', () => {
+    createMirrorForSelected($('#mobile-prop-mirror-layout')?.value);
+    populateMobileProps();
+  });
+  $$('[data-mobile-linked-transform]').forEach(button => {
+    button.addEventListener('click', () => {
+      transformSelectedLinkedCopy(button.dataset.mobileLinkedTransform);
+      populateMobileProps();
+    });
+  });
+  $('#mobile-select-mirror')?.addEventListener('click', () => {
+    const source = getSelected();
+    const child = source && getMirroredChild(state.elements, source.id);
+    if (child) selectElement(child.id);
+  });
+  $('#mobile-select-mirror-source')?.addEventListener('click', () => {
+    const child = getSelected();
+    if (child?.mirrorSourceId) selectElement(child.mirrorSourceId);
+  });
+  $('#mobile-remove-mirror')?.addEventListener('click', () => {
+    removeSelectedMirror();
+    populateMobileProps();
+  });
 
   // Position and size
   $('#mobile-prop-x')?.addEventListener('change', (e) => updateProp('x', measurementToPixels(e.target.value)));
@@ -7974,6 +8318,24 @@ function init() {
     const id = state.selectedIds[0];
     if (id) modifyElement(id, { nonPrintable: e.target.checked });
   });
+
+  $('#prop-create-mirror').addEventListener('click', () => createMirrorForSelected());
+  $$('[data-linked-transform]').forEach(button => {
+    button.addEventListener('click', () => {
+      transformSelectedLinkedCopy(button.dataset.linkedTransform);
+    });
+  });
+  $('#prop-select-mirror').addEventListener('click', () => {
+    const source = getSelected();
+    const child = source && getMirroredChild(state.elements, source.id);
+    if (child) selectElement(child.id);
+  });
+  $('#prop-select-mirror-source').addEventListener('click', () => {
+    const child = getSelected();
+    if (child?.mirrorSourceId) selectElement(child.mirrorSourceId);
+  });
+  $('#prop-remove-mirror').addEventListener('click', removeSelectedMirror);
+  $('#prop-remove-mirror-child').addEventListener('click', removeSelectedMirror);
 
   // Properties panel - text
   // Track input changes for history (saves on blur only if value changed)

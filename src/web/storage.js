@@ -151,7 +151,7 @@ export function exportDesign(name) {
 
   return JSON.stringify({
     name,
-    version: 5, // Version 5 includes an explicit template data column schema
+    version: 6, // Version 6 supports linked copies with independent transforms
     ...design,
   }, null, 2);
 }

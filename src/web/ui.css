@@ -702,6 +702,17 @@ input[type='range'] {
   width: 42px;
 }
 
+.linked-transform-button[aria-pressed='true'] {
+  border-color: #7c3aed !important;
+  background: #7c3aed !important;
+  color: #fff !important;
+  box-shadow: 0 2px 7px rgba(124, 58, 237, 0.22);
+}
+
+.linked-transform-button[aria-pressed='true']:hover {
+  background: #6d28d9 !important;
+}
+
 /* Panels, dialogs, and status */
 .template-panel-modern {
   background: linear-gradient(180deg, #fbfaff, #f7f5ff) !important;

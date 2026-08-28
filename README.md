@@ -39,6 +39,8 @@ python3 -m http.server 8080
 
 **Non-printable Guides** - Mark any text, image, barcode, QR code, or shape as non-printable. Guides stay visible at 50% opacity while editing and are omitted from print previews, printing, PDF, and PNG output.
 
+**Linked Copies for Folded Labels** - Link a copy of any text, image, barcode, QR code, or shape. Choose whether it starts beside or above/below the original, then experiment with independent Flip H, Flip V, Rotate 180°, and Reset controls. Copies start inside the label, remain freely positionable, and continue to follow the original's content, styling, size, and rotation. A purple dashed marker identifies the copy in the editor but is not printed or exported.
+
 **Instant Expressions** - Dynamic values at print time using `[[expression]]` syntax: `[[date]]`, `[[time]]`, `[[datetime]]`, or custom formats like `[[date|MM/DD/YYYY]]`. Works in text, barcodes, and QR codes.
 
 **Print Preview** - Toggle dither preview to see exact thermal print output before printing.

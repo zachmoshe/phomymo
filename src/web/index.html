@@ -308,7 +308,7 @@
       transform: translateX(0) !important;
     }
   </style>
-  <link rel="stylesheet" href="ui.css?v=10">
+  <link rel="stylesheet" href="ui.css?v=11">
 </head>
 <body class="app-shell bg-gray-100 h-screen flex flex-col overflow-hidden">
 
@@ -807,6 +807,50 @@
             <input type="checkbox" id="prop-non-printable" class="w-3.5 h-3.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500">
             <span><span class="font-medium">Non-printable</span> <span class="text-amber-700">(template guide)</span></span>
           </label>
+
+          <!-- Linked mirrored element controls -->
+          <div id="prop-mirror-section" class="rounded-lg border border-purple-200 bg-purple-50 p-2.5 text-xs text-purple-950">
+            <div id="prop-mirror-source-controls">
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <span class="font-semibold">Linked copy</span>
+                <span id="prop-mirror-status" class="hidden rounded-full bg-purple-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-800">Linked</span>
+              </div>
+              <label id="prop-mirror-layout-control" class="mb-2 block">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-purple-600">Initial placement</span>
+                <select id="prop-mirror-layout" class="w-full rounded border border-purple-200 bg-white px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-purple-400">
+                  <option value="horizontal">Beside original</option>
+                  <option value="vertical">Above or below original</option>
+                </select>
+                <span class="mt-1 block leading-relaxed text-purple-600">The copy starts unchanged. Select it to transform it after creation.</span>
+              </label>
+              <button id="prop-create-mirror" class="w-full rounded bg-purple-600 px-2 py-1.5 font-medium text-white hover:bg-purple-700">Create linked copy</button>
+              <div id="prop-existing-mirror-actions" class="hidden grid grid-cols-2 gap-1.5">
+                <button id="prop-select-mirror" class="rounded border border-purple-300 bg-white px-2 py-1.5 font-medium text-purple-700 hover:bg-purple-100">Select copy</button>
+                <button id="prop-remove-mirror" class="rounded border border-purple-300 bg-white px-2 py-1.5 font-medium text-purple-700 hover:bg-purple-100">Remove copy</button>
+              </div>
+            </div>
+            <div id="prop-mirror-child-controls" class="hidden">
+              <div class="mb-1 flex items-center justify-between gap-2">
+                <span class="font-semibold">Linked copy</span>
+                <span id="prop-linked-transform-badge" class="rounded-full bg-purple-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-800">Link</span>
+              </div>
+              <p class="mb-2 leading-relaxed text-purple-700">Move this copy freely. Content, style, size, and rotation are inherited from the original.</p>
+              <div class="mb-2">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-purple-600">Transform copy</span>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <button id="prop-linked-flip-horizontal" data-linked-transform="horizontal" aria-pressed="false" class="linked-transform-button rounded border border-purple-300 bg-white px-2 py-1.5 font-medium text-purple-700 hover:bg-purple-100">Flip H</button>
+                  <button id="prop-linked-flip-vertical" data-linked-transform="vertical" aria-pressed="false" class="linked-transform-button rounded border border-purple-300 bg-white px-2 py-1.5 font-medium text-purple-700 hover:bg-purple-100">Flip V</button>
+                  <button id="prop-linked-rotate-180" data-linked-transform="rotate-180" aria-pressed="false" class="linked-transform-button rounded border border-purple-300 bg-white px-2 py-1.5 font-medium text-purple-700 hover:bg-purple-100">Rotate 180°</button>
+                  <button data-linked-transform="reset" class="linked-transform-button rounded border border-purple-300 bg-white px-2 py-1.5 font-medium text-purple-700 hover:bg-purple-100">Reset</button>
+                </div>
+                <span class="mt-1 block leading-relaxed text-purple-600">Combine Flip H and Flip V freely. Together they equal Rotate 180°.</span>
+              </div>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button id="prop-select-mirror-source" class="rounded border border-purple-300 bg-white px-2 py-1.5 font-medium text-purple-700 hover:bg-purple-100">Select original</button>
+                <button id="prop-remove-mirror-child" class="rounded border border-purple-300 bg-white px-2 py-1.5 font-medium text-purple-700 hover:bg-purple-100">Remove copy</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <hr class="my-3 border-gray-200">
@@ -2238,7 +2282,7 @@
     pdfjsModule.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
     window.pdfjsLib = pdfjsModule;
   </script>
-  <script type="module" src="app.js?v=160"></script>
+  <script type="module" src="app.js?v=162"></script>
   <script>
     // Show body once styles are ready
     requestAnimationFrame(() => {

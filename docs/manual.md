@@ -129,6 +129,21 @@ Enable **Non-printable (template guide)** on any element that should help positi
 
 ![Position properties](screenshots/03-element-properties/09-position-properties.png)
 
+### Linked Copies for Folded Labels
+
+Select any text, image, barcode, QR code, or shape and use **Linked copy** in the common Properties section. Choose whether the new copy should initially appear beside or above/below the original, then click **Create linked copy**. The copy starts with the same orientation as the original.
+
+Once the linked copy is selected, use its transformation buttons as needed:
+
+- **Flip H** toggles a left-to-right flip.
+- **Flip V** toggles a top-to-bottom flip.
+- **Rotate 180°** applies both flips together; clicking it again undoes both.
+- **Reset** returns the copy to the original orientation.
+
+The linked copy is a real printable element and is always created inside the label. Drag it anywhere to leave the fold or cable-wrap margin you need. Its position is independent, while its content, styling, dimensions, rotation, and printable/guide state follow the original automatically. Select the original whenever you want to edit those inherited properties. Deleting the original also deletes its linked copy; deleting or removing only the copy leaves the original intact.
+
+The editor marks linked copies with a purple dashed border and a `Link`, `F·H`, `F·V`, or `180°` badge showing the active transformation. Those markers are editor-only and are omitted from printing, print preview, PNG, and PDF output.
+
 ---
 
 ## Templates and Batch Printing

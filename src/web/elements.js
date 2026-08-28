@@ -138,10 +138,139 @@ export function updateElement(elements, id, changes) {
 }
 
 /**
+ * Properties a linked child owns independently from its source.
+ * Everything else is inherited whenever the design is synchronized.
+ */
+const LINKED_COPY_INDEPENDENT_PROPERTIES = new Set([
+  'id',
+  'x',
+  'y',
+  'zone',
+  'groupId',
+  'mirrorSourceId',
+  'linkedCopyLayout',
+  'linkedFlipHorizontal',
+  'linkedFlipVertical',
+]);
+
+const LINKED_COPY_LAYOUTS = new Set(['horizontal', 'vertical']);
+
+/** Normalize initial placement while accepting the earlier mirror-mode values. */
+export function normalizeLinkedCopyLayout(layout) {
+  if (LINKED_COPY_LAYOUTS.has(layout)) return layout;
+  return layout === 'x' || layout === 'flip-vertical' ? 'vertical' : 'horizontal';
+}
+
+/** Convert an earlier saved mirror mode into the new composable flip state. */
+function getLegacyLinkedCopyTransform(mode) {
+  return {
+    horizontal: mode === 'y' || mode === 'flip-horizontal',
+    vertical: mode === 'x' || mode === 'flip-vertical',
+  };
+}
+
+/**
+ * Return the mirrored child belonging to a source element, if it has one.
+ */
+export function getMirroredChild(elements, sourceId) {
+  return elements.find(el => el.mirrorSourceId === sourceId) || null;
+}
+
+/**
+ * Create one freely-positionable linked child for a source element. Creation
+ * controls placement only; transforms can be toggled on the child afterwards.
+ */
+export function createMirroredElement(elements, sourceId, layout = 'horizontal') {
+  const source = elements.find(el => el.id === sourceId);
+  if (!source || source.mirrorSourceId) return elements;
+
+  const linkedCopyLayout = normalizeLinkedCopyLayout(layout);
+  const existing = getMirroredChild(elements, sourceId);
+  if (existing) {
+    return synchronizeMirroredElements(updateElement(elements, existing.id, { linkedCopyLayout }));
+  }
+
+  const child = {
+    ...source,
+    id: generateId(),
+    x: source.x + (linkedCopyLayout === 'horizontal' ? source.width + 20 : 0),
+    y: source.y + (linkedCopyLayout === 'vertical' ? source.height + 20 : 0),
+    mirrorSourceId: source.id,
+    linkedCopyLayout,
+    linkedFlipHorizontal: false,
+    linkedFlipVertical: false,
+  };
+  // A linked copy's placement, grouping, and transforms are independent.
+  delete child.groupId;
+
+  return [...elements, child];
+}
+
+/**
+ * Copy inherited properties from every source to its mirrored child.
+ * Orphaned/malformed mirror relationships are safely detached rather than
+ * deleting user content from an imported design.
+ */
+export function synchronizeMirroredElements(elements) {
+  const elementsById = new Map(elements.map(el => [el.id, el]));
+  let changed = false;
+
+  const synchronized = elements.map(child => {
+    if (!child.mirrorSourceId) return child;
+
+    const source = elementsById.get(child.mirrorSourceId);
+    if (!source || source.mirrorSourceId || source.id === child.id) {
+      const detached = { ...child };
+      delete detached.mirrorSourceId;
+      delete detached.linkedCopyLayout;
+      delete detached.linkedFlipHorizontal;
+      delete detached.linkedFlipVertical;
+      delete detached.mirrorAxis;
+      changed = true;
+      return detached;
+    }
+
+    const legacyTransform = getLegacyLinkedCopyTransform(child.mirrorAxis);
+    const hasHorizontalFlip = Object.prototype.hasOwnProperty.call(child, 'linkedFlipHorizontal');
+    const hasVerticalFlip = Object.prototype.hasOwnProperty.call(child, 'linkedFlipVertical');
+    const next = {};
+    for (const [key, value] of Object.entries(source)) {
+      if (!LINKED_COPY_INDEPENDENT_PROPERTIES.has(key)) next[key] = value;
+    }
+    for (const key of LINKED_COPY_INDEPENDENT_PROPERTIES) {
+      if (Object.prototype.hasOwnProperty.call(child, key)) next[key] = child[key];
+    }
+    next.id = child.id;
+    next.mirrorSourceId = source.id;
+    next.linkedCopyLayout = normalizeLinkedCopyLayout(child.linkedCopyLayout ?? child.mirrorAxis);
+    next.linkedFlipHorizontal = hasHorizontalFlip
+      ? child.linkedFlipHorizontal === true
+      : legacyTransform.horizontal;
+    next.linkedFlipVertical = hasVerticalFlip
+      ? child.linkedFlipVertical === true
+      : legacyTransform.vertical;
+    delete next.mirrorAxis;
+
+    const childKeys = Object.keys(child);
+    const nextKeys = Object.keys(next);
+    const isSame = childKeys.length === nextKeys.length &&
+      nextKeys.every(key => child[key] === next[key]);
+    if (isSame) return child;
+
+    changed = true;
+    return next;
+  });
+
+  return changed ? synchronized : elements;
+}
+
+/**
  * Delete element by ID
  */
 export function deleteElement(elements, id) {
-  return elements.filter(el => el.id !== id);
+  // Deleting a source also removes its linked mirror. Deleting the mirror
+  // itself leaves the source untouched.
+  return elements.filter(el => el.id !== id && el.mirrorSourceId !== id);
 }
 
 /**
@@ -157,6 +286,11 @@ export function duplicateElement(elements, id) {
     x: original.x + 20,
     y: original.y + 20,
   };
+  delete copy.mirrorSourceId;
+  delete copy.linkedCopyLayout;
+  delete copy.linkedFlipHorizontal;
+  delete copy.linkedFlipVertical;
+  delete copy.mirrorAxis;
 
   return [...elements, copy];
 }
@@ -320,10 +454,16 @@ export function constrainSize(element) {
  * Clone element with new ID
  */
 export function cloneElement(element) {
-  return {
+  const clone = {
     ...element,
     id: generateId(),
   };
+  delete clone.mirrorSourceId;
+  delete clone.linkedCopyLayout;
+  delete clone.linkedFlipHorizontal;
+  delete clone.linkedFlipVertical;
+  delete clone.mirrorAxis;
+  return clone;
 }
 
 /**
@@ -557,11 +697,24 @@ export function cloneElementsToZone(elements, sourceZone, targetZone, replaceExi
     : elements;
 
   // Clone source elements to target zone
-  const clonedElements = sourceElements.map(el => ({
-    ...el,
-    id: generateId(),
-    zone: targetZone,
-  }));
+  const idMap = new Map(sourceElements.map(el => [el.id, generateId()]));
+  const clonedElements = sourceElements.map(el => {
+    const clone = {
+      ...el,
+      id: idMap.get(el.id),
+      zone: targetZone,
+    };
+    if (el.mirrorSourceId && idMap.has(el.mirrorSourceId)) {
+      clone.mirrorSourceId = idMap.get(el.mirrorSourceId);
+    } else {
+      delete clone.mirrorSourceId;
+      delete clone.linkedCopyLayout;
+      delete clone.linkedFlipHorizontal;
+      delete clone.linkedFlipVertical;
+      delete clone.mirrorAxis;
+    }
+    return clone;
+  });
 
   return [...result, ...clonedElements];
 }
