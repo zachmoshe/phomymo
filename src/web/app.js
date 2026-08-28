@@ -173,7 +173,8 @@ const state = {
   },
   // Template state
   templateFields: [],     // Detected field names from elements
-  templateData: [],       // Array of data records for batch printing
+  templateColumns: [],    // Explicit data schema, including manually added columns
+  templateData: [],       // Array of data records for batch printing (including unused CSV columns)
   selectedRecords: [],    // Indices of selected records for printing
   currentPreviewIndex: 0, // Current label index in full preview
   // Inline text editing state
@@ -4930,6 +4931,52 @@ function hideSaveDialog() {
 }
 
 /**
+ * Start a blank design without changing the currently selected label size.
+ */
+function handleNewDesign() {
+  const hasDesignContent = state.elements.length > 0 || state.templateData.length > 0 || state.templateColumns.length > 0;
+  if (hasDesignContent && !confirm('Start a new blank label? Unsaved elements and template data will be cleared.')) {
+    return;
+  }
+
+  // Finish any active inline edit before discarding the current elements.
+  stopInlineEdit(true);
+
+  state.elements = [];
+  state.selectedIds = [];
+  state.alignmentGuides = [];
+  state.templateFields = [];
+  state.templateColumns = [];
+  state.templateData = [];
+  state.selectedRecords = [];
+  state.currentPreviewIndex = 0;
+  state.currentDesignName = null;
+
+  // Preserve the active size configuration, including multi-label layouts.
+  if (state.multiLabel.enabled) {
+    state.activeZone = 0;
+    state.renderer.setActiveZone(0);
+    updateZoneToolbar();
+  }
+
+  state.renderer.clearCache();
+  resetHistory();
+  closeMobileProps();
+  updateToolbarState();
+  updatePropertiesPanel();
+  updateElementsList();
+  updateMobileLabelName();
+  detectTemplateFields();
+  updateMobileUI();
+  render();
+
+  const sizeText = state.labelSize.round
+    ? `${state.labelSize.width}mm round`
+    : `${state.labelSize.width}×${state.labelSize.height}mm`;
+  setStatus(`New blank label (${sizeText})`);
+}
+
+/**
  * Save current design
  */
 function handleSave() {
@@ -5853,6 +5900,10 @@ function initMobileUI() {
   $('#mobile-menu-backdrop')?.addEventListener('click', closeMobileMenu);
 
   // Mobile menu actions
+  $('#mobile-new-btn')?.addEventListener('click', () => {
+    closeMobileMenu();
+    handleNewDesign();
+  });
   $('#mobile-save-btn')?.addEventListener('click', () => {
     closeMobileMenu();
     showSaveDialog();
@@ -7608,7 +7659,8 @@ function init() {
   $('#group-btn').addEventListener('click', handleGroup);
   $('#ungroup-btn').addEventListener('click', handleUngroup);
 
-  // Save/Load
+  // New/Save/Load
+  $('#new-btn').addEventListener('click', handleNewDesign);
   $('#save-btn').addEventListener('click', showSaveDialog);
   $('#save-cancel').addEventListener('click', hideSaveDialog);
   $('#save-confirm').addEventListener('click', handleSave);
