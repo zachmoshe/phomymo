@@ -88,8 +88,14 @@ export function substituteFields(elements, record) {
 function substituteString(str, record) {
   return str.replace(FIELD_PATTERN, (match, field) => {
     const trimmedField = field.trim();
-    // Return the value if it exists, otherwise keep the placeholder
-    return record.hasOwnProperty(trimmedField) ? record[trimmedField] : match;
+    // Prefer an exact header match, then try case-insensitive matching so an
+    // imported CSV column remains usable without creating a duplicate alias.
+    if (Object.prototype.hasOwnProperty.call(record, trimmedField)) {
+      return record[trimmedField];
+    }
+    const normalizedField = trimmedField.toLowerCase();
+    const matchingKey = Object.keys(record).find(key => key.toLowerCase() === normalizedField);
+    return matchingKey !== undefined ? record[matchingKey] : match;
   });
 }
 

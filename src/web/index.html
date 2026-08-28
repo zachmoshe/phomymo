@@ -602,12 +602,12 @@
         </div>
       </div>
 
-      <div class="toolbar-divider hidden" id="template-toolbar-divider"></div>
+      <div class="toolbar-divider" id="template-toolbar-divider"></div>
 
-      <!-- Template Manage Data (shows when template fields detected) -->
-      <button id="template-toolbar-btn" class="hidden toolbar-btn bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200" title="Manage Template Data">
+      <!-- Template and batch printing -->
+      <button id="template-toolbar-btn" class="toolbar-btn bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200" title="Template and batch printing">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/></svg>
-        <span id="template-toolbar-label" class="hidden sm:inline">Manage Data</span>
+        <span id="template-toolbar-label" class="hidden sm:inline">Template</span>
       </button>
     </div>
   </div>
@@ -1644,8 +1644,8 @@
   </div>
 
   <!-- Template Data Dialog -->
-  <div id="template-data-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+  <div id="template-data-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[70] px-4">
+    <div id="template-data-window" class="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
       <div class="flex items-center justify-between p-4 border-b border-gray-200">
         <div>
           <h3 class="text-lg font-semibold text-gray-900">Template Data</h3>
@@ -1656,12 +1656,16 @@
         </button>
       </div>
 
-      <div class="p-4 border-b border-gray-200 flex items-center gap-3">
+      <div class="p-4 border-b border-gray-200 flex flex-wrap items-center gap-3">
         <button id="template-import-csv" class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium flex items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
           Import CSV
         </button>
         <input type="file" id="template-csv-input" class="hidden" accept=".csv,text/csv">
+        <button id="template-add-column" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-sm font-medium flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          Add Column
+        </button>
         <button id="template-add-row" class="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg text-sm font-medium flex items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
           Add Row
@@ -1676,8 +1680,8 @@
       <div class="flex-1 overflow-auto p-4">
         <div id="template-data-empty" class="text-center py-12 text-gray-400">
           <svg class="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-          <p class="mb-2">No data yet</p>
-          <p class="text-sm">Import a CSV file or add rows manually</p>
+          <p id="template-data-empty-title" class="mb-2">No data yet</p>
+          <p id="template-data-empty-description" class="text-sm">Import a CSV file or add columns and rows manually</p>
         </div>
         <table class="w-full text-sm">
           <thead>
@@ -1698,6 +1702,22 @@
         </button>
       </div>
     </div>
+  </div>
+
+  <!-- Add Template Column Dialog -->
+  <div id="template-column-dialog" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[80] p-4">
+    <form id="template-column-form" class="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" novalidate>
+      <h3 class="text-lg font-semibold text-gray-900">Add Column</h3>
+      <p class="text-sm text-gray-500 mt-1 mb-4">Create a field you can fill manually and use as <span class="font-medium text-purple-600">{{Column}}</span> in the template.</p>
+      <label for="template-column-name" class="block text-sm font-medium text-gray-700 mb-1.5">Column name</label>
+      <input id="template-column-name" type="text" maxlength="100" autocomplete="off" placeholder="e.g. Serial Number"
+        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+      <p id="template-column-error" class="min-h-5 mt-1 text-sm text-red-600" role="alert"></p>
+      <div class="flex justify-end gap-2 mt-3">
+        <button id="template-column-cancel" type="button" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium">Add Column</button>
+      </div>
+    </form>
   </div>
 
   <!-- Preview Dialog -->
@@ -2218,7 +2238,7 @@
     pdfjsModule.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
     window.pdfjsLib = pdfjsModule;
   </script>
-  <script type="module" src="app.js?v=151"></script>
+  <script type="module" src="app.js?v=160"></script>
   <script>
     // Show body once styles are ready
     requestAnimationFrame(() => {

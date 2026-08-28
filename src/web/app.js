@@ -54,7 +54,7 @@ import {
   loadDesign,
   listDesigns,
   deleteDesign,
-} from './storage.js?v=100';
+} from './storage.js?v=102';
 import {
   extractFields,
   hasTemplateFields,
@@ -64,7 +64,7 @@ import {
   createEmptyRecord,
   hasExpressions,
   evaluateExpressions,
-} from './templates.js?v=101';
+} from './templates.js?v=102';
 import {
   ZOOM,
   TEXT,
@@ -1334,21 +1334,19 @@ function updateTemplateIndicator() {
   const toolbarBtn = $('#template-toolbar-btn');
   const toolbarDivider = $('#template-toolbar-divider');
   const toolbarLabel = $('#template-toolbar-label');
-  const templatePanel = $('#template-panel');
 
   const hasFields = state.templateFields.length > 0;
 
-  if (hasFields) {
-    fieldCount.textContent = state.templateFields.length;
+  // Keep template and batch printing discoverable even before fields exist.
+  toolbarBtn.classList.remove('hidden');
+  toolbarDivider.classList.remove('hidden');
+  fieldCount.textContent = state.templateFields.length;
 
+  if (hasFields) {
     // Show field tags
     fieldTags.innerHTML = state.templateFields.map(f =>
       `<span class="px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">{{${escapeHtml(f)}}}</span>`
     ).join('');
-
-    // Show toolbar button
-    toolbarBtn.classList.remove('hidden');
-    toolbarDivider.classList.remove('hidden');
 
     // Update toolbar label with record count
     if (state.templateData.length > 0) {
@@ -1357,12 +1355,8 @@ function updateTemplateIndicator() {
       toolbarLabel.textContent = 'Template';
     }
   } else {
-    fieldTags.innerHTML = '<span class="text-purple-400 italic">None</span>';
-
-    // Hide toolbar button and template panel
-    toolbarBtn.classList.add('hidden');
-    toolbarDivider.classList.add('hidden');
-    templatePanel.classList.add('hidden');
+    fieldTags.innerHTML = '<span class="text-purple-400 italic">Add {{Field}} to text, barcode, or QR content</span>';
+    toolbarLabel.textContent = 'Template';
   }
 
   // Update data count
@@ -1515,11 +1509,173 @@ function toggleFieldDropdown(type) {
 }
 
 /**
+ * Get every column currently available in the template data.
+ *
+ * CSV columns are kept in their original order. Template fields that are not
+ * present in the imported data are appended so they can still be entered
+ * manually. Field matching is case-insensitive to avoid showing duplicate
+ * columns such as "name" and "Name".
+ */
+function getTemplateDataColumns() {
+  const columns = [];
+  const seen = new Set();
+
+  const addColumn = (column) => {
+    if (typeof column !== 'string' || !column) return;
+    const normalized = column.toLowerCase();
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+    columns.push(column);
+  };
+
+  state.templateColumns.forEach(addColumn);
+  for (const record of state.templateData) {
+    Object.keys(record).forEach(addColumn);
+  }
+  state.templateFields.forEach(addColumn);
+
+  // Keep the schema explicit so columns survive when the dataset has no rows.
+  state.templateColumns = columns;
+  return columns;
+}
+
+function showAddTemplateColumnDialog() {
+  const dialog = $('#template-column-dialog');
+  const input = $('#template-column-name');
+  $('#template-column-error').textContent = '';
+  input.value = '';
+  dialog.classList.remove('hidden');
+  requestAnimationFrame(() => input.focus());
+}
+
+function hideAddTemplateColumnDialog() {
+  $('#template-column-dialog').classList.add('hidden');
+}
+
+function validateTemplateColumnName(columnName, originalName = null) {
+  const trimmedName = columnName.trim();
+  if (!trimmedName) {
+    return { valid: false, error: 'Enter a column name.' };
+  }
+  if (/[{}]/.test(trimmedName)) {
+    return { valid: false, error: 'Column names cannot contain { or }.' };
+  }
+
+  const normalizedName = trimmedName.toLowerCase();
+  const normalizedOriginal = originalName?.toLowerCase();
+  const duplicate = getTemplateDataColumns().some(column =>
+    column.toLowerCase() === normalizedName && column.toLowerCase() !== normalizedOriginal
+  );
+  if (duplicate) {
+    return { valid: false, error: 'A column with this name already exists.' };
+  }
+
+  return { valid: true, name: trimmedName };
+}
+
+function addTemplateColumn() {
+  const input = $('#template-column-name');
+  const error = $('#template-column-error');
+  const validation = validateTemplateColumnName(input.value);
+  if (!validation.valid) {
+    error.textContent = validation.error;
+    input.select();
+    return;
+  }
+  const columnName = validation.name;
+
+  state.templateColumns.push(columnName);
+  for (const record of state.templateData) {
+    record[columnName] = '';
+  }
+
+  hideAddTemplateColumnDialog();
+  updateTemplateDataTable();
+  setStatus(`Added column "${columnName}"`);
+}
+
+function replaceTemplateFieldName(value, oldName, newName) {
+  if (typeof value !== 'string') return { value, replacements: 0 };
+
+  let replacements = 0;
+  const normalizedOldName = oldName.toLowerCase();
+  const renamedValue = value.replace(/\{\{([^}]+)\}\}/g, (match, fieldName) => {
+    if (fieldName.trim().toLowerCase() !== normalizedOldName) return match;
+    replacements++;
+    return `{{${newName}}}`;
+  });
+
+  return { value: renamedValue, replacements };
+}
+
+function renameTemplateColumn(oldName, requestedName) {
+  const validation = validateTemplateColumnName(requestedName, oldName);
+  if (!validation.valid) {
+    showToast(validation.error, 'error');
+    setStatus(validation.error);
+    updateTemplateDataTable();
+    return;
+  }
+
+  const newName = validation.name;
+  if (newName === oldName) return;
+
+  const normalizedOldName = oldName.toLowerCase();
+  state.templateColumns = getTemplateDataColumns().map(column =>
+    column.toLowerCase() === normalizedOldName ? newName : column
+  );
+
+  // Move every row value to the new key without losing falsy values such as 0.
+  for (const record of state.templateData) {
+    const matchingKeys = Object.keys(record).filter(key => key.toLowerCase() === normalizedOldName);
+    const sourceKey = matchingKeys.includes(oldName) ? oldName : matchingKeys[0];
+    const value = sourceKey === undefined ? '' : record[sourceKey];
+    matchingKeys.forEach(key => delete record[key]);
+    Object.defineProperty(record, newName, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  // Keep current labels connected to the renamed data column.
+  let updatedReferences = 0;
+  state.elements = state.elements.map(element => {
+    let changed = false;
+    const renamedElement = { ...element };
+    for (const property of ['text', 'barcodeData', 'qrData']) {
+      const result = replaceTemplateFieldName(element[property], oldName, newName);
+      if (result.replacements > 0) {
+        renamedElement[property] = result.value;
+        updatedReferences += result.replacements;
+        changed = true;
+      }
+    }
+    return changed ? renamedElement : element;
+  });
+
+  if (updatedReferences > 0) {
+    state.renderer.clearCache();
+    render();
+    updatePropertiesPanel();
+    updateElementsList();
+  }
+  detectTemplateFields();
+  updateTemplateDataTable();
+
+  const referenceText = updatedReferences > 0
+    ? ` and updated ${updatedReferences} template reference${updatedReferences === 1 ? '' : 's'}`
+    : '';
+  setStatus(`Renamed column "${oldName}" to "${newName}"${referenceText}`);
+}
+
+/**
  * Add a template data record
  */
 function addTemplateRecord(record = null) {
   if (!record) {
-    record = createEmptyRecord(state.templateFields);
+    record = createEmptyRecord(getTemplateDataColumns());
   }
   state.templateData.push(record);
   state.selectedRecords.push(state.templateData.length - 1);
@@ -1594,33 +1750,50 @@ function deselectAllRecords() {
 function updateTemplateDataTable() {
   const tableBody = $('#template-data-body');
   const emptyState = $('#template-data-empty');
+  const emptyTitle = $('#template-data-empty-title');
+  const emptyDescription = $('#template-data-empty-description');
   const tableHeader = $('#template-data-header');
   const recordCount = $('#template-record-count');
+  const dataColumns = getTemplateDataColumns();
+
+  // Build the header even before rows exist so a manually created schema is
+  // immediately visible.
+  tableHeader.innerHTML = `
+    <th class="px-2 py-1 text-left text-xs font-medium text-gray-500 w-8">
+      <input type="checkbox" id="template-select-all" class="rounded"
+        ${state.templateData.length > 0 && state.selectedRecords.length === state.templateData.length ? 'checked' : ''}
+        ${state.templateData.length === 0 ? 'disabled' : ''}>
+    </th>
+    <th class="px-2 py-1 text-left text-xs font-medium text-gray-500 w-8">#</th>
+    ${dataColumns.map(f => `
+      <th class="px-1 py-1 text-left">
+        <input type="text" class="template-column-header-input" value="${escapeHtml(f)}"
+          data-original-field="${escapeHtml(f)}" size="${Math.max(8, Math.min(30, f.length + 1))}"
+          aria-label="Rename column ${escapeHtml(f)}" title="Click to rename column">
+      </th>
+    `).join('')}
+    <th class="px-2 py-1 text-right text-xs font-medium text-gray-500 w-16">Actions</th>
+  `;
 
   if (state.templateData.length === 0) {
     emptyState.classList.remove('hidden');
-    tableHeader.classList.add('hidden');
+    tableHeader.classList.toggle('hidden', dataColumns.length === 0);
+    if (dataColumns.length > 0) {
+      emptyTitle.textContent = `${dataColumns.length} column${dataColumns.length === 1 ? '' : 's'} ready`;
+      emptyDescription.textContent = 'Add a row to start entering data';
+    } else {
+      emptyTitle.textContent = 'No data yet';
+      emptyDescription.textContent = 'Import a CSV file or add columns and rows manually';
+    }
     tableBody.innerHTML = '';
     recordCount.textContent = '0 records';
+    bindTemplateTableEvents();
     updateTemplateIndicator();
     return;
   }
 
   emptyState.classList.add('hidden');
   tableHeader.classList.remove('hidden');
-
-  // Build header
-  tableHeader.innerHTML = `
-    <th class="px-2 py-1 text-left text-xs font-medium text-gray-500 w-8">
-      <input type="checkbox" id="template-select-all" class="rounded"
-        ${state.selectedRecords.length === state.templateData.length ? 'checked' : ''}>
-    </th>
-    <th class="px-2 py-1 text-left text-xs font-medium text-gray-500 w-8">#</th>
-    ${state.templateFields.map(f => `
-      <th class="px-2 py-1 text-left text-xs font-medium text-gray-500">${escapeHtml(f)}</th>
-    `).join('')}
-    <th class="px-2 py-1 text-right text-xs font-medium text-gray-500 w-16">Actions</th>
-  `;
 
   // Build rows
   tableBody.innerHTML = state.templateData.map((record, idx) => `
@@ -1630,10 +1803,10 @@ function updateTemplateDataTable() {
           data-index="${idx}" ${state.selectedRecords.includes(idx) ? 'checked' : ''}>
       </td>
       <td class="px-2 py-1 text-xs text-gray-400">${idx + 1}</td>
-      ${state.templateFields.map(f => `
+      ${dataColumns.map(f => `
         <td class="px-2 py-1">
           <input type="text" class="template-field-input w-full text-base border-0 bg-transparent p-0 focus:ring-1 focus:ring-blue-500 rounded"
-            data-index="${idx}" data-field="${escapeHtml(f)}" value="${escapeHtml(record[f] || '')}">
+            data-index="${idx}" data-field="${escapeHtml(f)}" value="${escapeHtml(record[f] ?? '')}">
         </td>
       `).join('')}
       <td class="px-2 py-1 text-right">
@@ -1655,6 +1828,24 @@ function updateTemplateDataTable() {
  * Bind event handlers for template data table
  */
 function bindTemplateTableEvents() {
+  // Editable column headers
+  $$('.template-column-header-input').forEach(input => {
+    input.addEventListener('focus', () => input.select());
+    input.addEventListener('change', () => {
+      renameTemplateColumn(input.dataset.originalField, input.value);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        input.blur();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        input.value = input.dataset.originalField;
+        input.blur();
+      }
+    });
+  });
+
   // Select all checkbox
   const selectAll = $('#template-select-all');
   if (selectAll) {
@@ -1730,28 +1921,13 @@ function importCSVData(csvString) {
     return;
   }
 
-  // Map CSV columns to template fields
-  const mappedRecords = result.records.map(csvRecord => {
-    const record = createEmptyRecord(state.templateFields);
-    for (const field of state.templateFields) {
-      // Try exact match first, then case-insensitive
-      if (csvRecord.hasOwnProperty(field)) {
-        record[field] = csvRecord[field];
-      } else {
-        const lowerField = field.toLowerCase();
-        const matchingKey = Object.keys(csvRecord).find(k => k.toLowerCase() === lowerField);
-        if (matchingKey) {
-          record[field] = csvRecord[matchingKey];
-        }
-      }
-    }
-    return record;
-  });
-
-  state.templateData = mappedRecords;
-  state.selectedRecords = mappedRecords.map((_, i) => i);
+  // Preserve the complete CSV records. Columns do not have to be referenced by
+  // the current label yet; users can add matching template fields later.
+  state.templateColumns = [...result.headers];
+  state.templateData = result.records;
+  state.selectedRecords = result.records.map((_, i) => i);
   updateTemplateDataTable();
-  setStatus(`Imported ${mappedRecords.length} records`);
+  setStatus(`Imported ${result.records.length} records with ${result.headers.length} columns`);
 }
 
 /**
@@ -4993,10 +5169,16 @@ function handleSave() {
       labelSize: state.labelSize,
     };
 
-    // Include template data if present
-    if (state.templateFields.length > 0) {
+    // Include template data and its explicit column schema if present
+    const templateColumns = getTemplateDataColumns();
+    if (state.templateFields.length > 0 || templateColumns.length > 0) {
       designData.isTemplate = true;
+    }
+    if (state.templateFields.length > 0) {
       designData.templateFields = state.templateFields;
+    }
+    if (templateColumns.length > 0) {
+      designData.templateColumns = templateColumns;
     }
     if (state.templateData.length > 0) {
       designData.templateData = state.templateData;
@@ -5104,16 +5286,22 @@ function handleExport() {
   // Build export data
   const exportData = {
     name: 'Untitled Design',
-    version: 3, // Version 3 includes multi-label support
+    version: 5, // Version 5 includes an explicit template data column schema
     elements: state.elements,
     labelSize: state.labelSize,
     exportedAt: new Date().toISOString(),
   };
 
-  // Include template data if present
-  if (state.templateFields.length > 0) {
+  // Include template data and its explicit column schema if present
+  const templateColumns = getTemplateDataColumns();
+  if (state.templateFields.length > 0 || templateColumns.length > 0) {
     exportData.isTemplate = true;
+  }
+  if (state.templateFields.length > 0) {
     exportData.templateFields = state.templateFields;
+  }
+  if (templateColumns.length > 0) {
+    exportData.templateColumns = templateColumns;
   }
   if (state.templateData.length > 0) {
     exportData.templateData = state.templateData;
@@ -5274,10 +5462,14 @@ function handleImportFile(file) {
         }
       }
 
-      // Load template data if present
+      // Load template data and preserve an explicit empty-column schema.
+      state.templateColumns = Array.isArray(data.templateColumns) ? [...data.templateColumns] : [];
       if (data.templateData && Array.isArray(data.templateData)) {
         state.templateData = data.templateData;
         state.selectedRecords = data.templateData.map((_, i) => i); // Select all by default
+      } else {
+        state.templateData = [];
+        state.selectedRecords = [];
       }
 
       // Clear selection and update renderer
@@ -5398,7 +5590,8 @@ function handleLoad(name) {
   state.labelSize = design.labelSize || { width: 40, height: 30 };
   state.selectedIds = [];
 
-  // Restore template data if present
+  // Restore template data and preserve an explicit empty-column schema.
+  state.templateColumns = Array.isArray(design.templateColumns) ? [...design.templateColumns] : [];
   state.templateData = design.templateData || [];
   state.selectedRecords = state.templateData.map((_, i) => i); // Select all by default
 
@@ -8233,6 +8426,18 @@ function init() {
       handleCSVFileImport(e.target.files[0]);  // Validation inside function
       e.target.value = '';
     }
+  });
+  $('#template-add-column').addEventListener('click', showAddTemplateColumnDialog);
+  $('#template-column-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    addTemplateColumn();
+  });
+  $('#template-column-cancel').addEventListener('click', hideAddTemplateColumnDialog);
+  $('#template-column-dialog').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) hideAddTemplateColumnDialog();
+  });
+  $('#template-column-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideAddTemplateColumnDialog();
   });
   $('#template-add-row').addEventListener('click', () => addTemplateRecord());
   $('#template-clear-all').addEventListener('click', () => {

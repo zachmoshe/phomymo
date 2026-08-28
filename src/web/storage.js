@@ -151,7 +151,7 @@ export function exportDesign(name) {
 
   return JSON.stringify({
     name,
-    version: 3, // Version 3 includes multi-label support
+    version: 5, // Version 5 includes an explicit template data column schema
     ...design,
   }, null, 2);
 }
@@ -187,6 +187,9 @@ export function importDesign(jsonString, overrideName = null) {
     }
     if (data.templateFields && Array.isArray(data.templateFields)) {
       designData.templateFields = data.templateFields;
+    }
+    if (data.templateColumns && Array.isArray(data.templateColumns)) {
+      designData.templateColumns = data.templateColumns;
     }
     if (data.templateData && Array.isArray(data.templateData)) {
       designData.templateData = data.templateData;

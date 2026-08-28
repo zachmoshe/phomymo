@@ -1,4 +1,4 @@
-Name,Price
-Widget A,9.99
-Widget B,14.99
-Widget C,4.50
+Name,Price,SKU,Notes
+Widget A,9.99,WA-001,Popular item
+Widget B,14.99,WB-002,Premium item
+Widget C,4.50,WC-003,Clearance item
