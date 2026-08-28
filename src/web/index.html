@@ -7,6 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Phomymo - Free Label Designer for Phomemo Thermal Printers</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=1">
 
   <!-- SEO Meta Tags -->
   <meta name="description" content="Free browser-based label designer for Phomemo thermal printers. Create custom labels with text, barcodes, QR codes, and images. No drivers needed - connects via Bluetooth. Works with M02, M03, M110, M120, M200, M220, M260, D30, D35, D50, Q30 and more.">
@@ -34,7 +35,7 @@
 
   <!-- Additional SEO -->
   <meta name="application-name" content="Phomymo Label Designer">
-  <meta name="theme-color" content="#3b82f6">
+  <meta name="theme-color" content="#5b5bd6">
 
   <!-- Structured Data for Rich Snippets -->
   <script type="application/ld+json">
@@ -68,7 +69,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;600;700&family=Lato:wght@400;700&family=Montserrat:wght@400;500;600;700&family=Oswald:wght@400;500;600&family=Playfair+Display:wght@400;500;600;700&family=Merriweather:wght@400;700&family=Roboto+Mono:wght@400;500;700&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;600;700&family=Lato:wght@400;700&family=Montserrat:wght@400;500;600;700&family=Oswald:wght@400;500;600&family=Playfair+Display:wght@400;500;600;700&family=Merriweather:wght@400;700&family=Roboto+Mono:wght@400;500;700&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     /* Hide body until styles are ready to prevent FOUC */
     body { opacity: 0; font-family: 'Inter', system-ui, sans-serif; }
@@ -307,11 +308,12 @@
       transform: translateX(0) !important;
     }
   </style>
+  <link rel="stylesheet" href="ui.css?v=10">
 </head>
-<body class="bg-gray-100 h-screen flex flex-col overflow-hidden">
+<body class="app-shell bg-gray-100 h-screen flex flex-col overflow-hidden">
 
   <!-- Mobile Top Bar -->
-  <header id="mobile-header" class="mobile-only fixed top-0 left-0 right-0 bg-white border-b border-gray-200 px-3 py-2 z-40">
+  <header id="mobile-header" class="app-mobile-header mobile-only fixed top-0 left-0 right-0 bg-white border-b border-gray-200 px-3 py-2 z-40">
     <div class="flex items-center w-full">
       <!-- Hamburger Menu Button -->
       <button id="mobile-menu-btn" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 flex-shrink-0">
@@ -338,7 +340,7 @@
       </div>
 
       <!-- GitHub & Affordable Magic Links (far right) -->
-      <div class="flex items-center gap-2 flex-shrink-0">
+      <div class="mobile-header-links flex items-center gap-2 flex-shrink-0">
         <a href="https://github.com/transcriptionstream/phomymo" target="_blank" rel="noopener" class="p-1.5 text-gray-600 hover:text-gray-900 active:bg-gray-100 rounded-lg">
           <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
         </a>
@@ -350,11 +352,17 @@
   </header>
 
   <!-- Desktop Top Bar -->
-  <header class="desktop-only bg-white border-b border-gray-200 px-2 sm:px-4 py-2 flex-shrink-0">
+  <header class="app-header desktop-only bg-white border-b border-gray-200 px-2 sm:px-4 py-2 flex-shrink-0">
     <div class="flex items-center justify-between gap-2">
       <div class="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-        <div class="flex items-center gap-1 sm:gap-2">
-          <h1 class="text-base sm:text-lg font-semibold text-gray-900">Phomymo</h1>
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true">
+            <svg fill="none" viewBox="0 0 24 24"><path d="M7.5 4.5h7.25a3.75 3.75 0 0 1 0 7.5H9v7.5H7.5v-15Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 7.5h5.5a.75.75 0 0 1 0 1.5H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </span>
+          <span class="brand-copy">
+            <h1 class="text-base sm:text-lg font-semibold text-gray-900">Phomymo</h1>
+            <span class="brand-subtitle">Label studio</span>
+          </span>
           <button id="info-btn" class="text-gray-400 hover:text-gray-600 transition-colors" title="About this project">
             <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           </button>
@@ -452,7 +460,7 @@
   </header>
 
   <!-- Toolbar (Desktop only) -->
-  <div class="desktop-only bg-white border-b border-gray-200 px-2 sm:px-4 py-2 flex-shrink-0">
+  <div class="app-toolbar desktop-only bg-white border-b border-gray-200 px-2 sm:px-4 py-2 flex-shrink-0">
     <div class="flex items-center gap-1 sm:gap-2 flex-wrap">
       <!-- Add Elements -->
       <button id="add-text" class="toolbar-btn" title="Add Text">
@@ -642,9 +650,9 @@
   </div>
 
   <!-- Main Content -->
-  <main class="flex-1 flex overflow-hidden relative">
+  <main class="app-workspace flex-1 flex overflow-hidden relative">
     <!-- Canvas Area -->
-    <div class="flex-1 flex items-center justify-center p-3 sm:p-6 overflow-auto relative">
+    <div class="canvas-workspace flex-1 flex items-center justify-center p-3 sm:p-6 overflow-auto relative">
       <div id="canvas-container" class="rounded-lg shadow-inner transition-transform origin-center" style="touch-action: none;">
         <canvas id="preview-canvas" class="cursor-crosshair rounded-lg" style="touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;"></canvas>
       </div>
@@ -674,7 +682,7 @@
     </div>
 
     <!-- Template Panel (shown when template button clicked) -->
-    <aside id="template-panel" class="hidden fixed md:relative inset-y-0 right-0 w-72 sm:w-64 bg-purple-50 border-l border-purple-200 flex-shrink-0 flex flex-col z-50 shadow-xl md:shadow-none">
+    <aside id="template-panel" class="template-panel-modern hidden fixed md:relative inset-y-0 right-0 w-72 sm:w-64 bg-purple-50 border-l border-purple-200 flex-shrink-0 flex flex-col z-50 shadow-xl md:shadow-none">
       <!-- Header -->
       <div class="p-4 border-b border-purple-200 flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -1127,7 +1135,7 @@
   </main>
 
   <!-- Status Bar -->
-  <footer class="bg-white border-t border-gray-200 px-2 sm:px-4 py-1.5 sm:py-2 flex-shrink-0">
+  <footer class="status-bar bg-white border-t border-gray-200 px-2 sm:px-4 py-1.5 sm:py-2 flex-shrink-0">
     <div class="flex items-center justify-between text-xs text-gray-400">
       <span id="status-message" class="truncate flex-1 mr-2">Ready</span>
       <div class="flex items-center gap-2 sm:gap-4 flex-shrink-0">
@@ -1838,7 +1846,7 @@
     <div id="mobile-menu-backdrop" class="absolute inset-0 bg-black/50"></div>
 
     <!-- Slide-out Menu -->
-    <aside id="mobile-menu-panel" class="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl transform -translate-x-full">
+    <aside id="mobile-menu-panel" class="app-drawer absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl transform -translate-x-full">
       <div class="p-4 border-b border-gray-200">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold text-gray-900">Phomymo</h2>

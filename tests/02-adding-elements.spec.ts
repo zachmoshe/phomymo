@@ -58,6 +58,33 @@ test.describe.serial('Adding Elements', () => {
     await expect(page.locator('#props-shape')).toBeVisible();
 
     await screenshot(page, CH, 5, 'rectangle-element-added');
+
+    await page.click('#elements-btn');
+    await expect(page.locator('#elements-dropdown')).toBeVisible();
+    const menuIsOnTop = await page.evaluate(() => {
+      const menu = document.querySelector('#elements-dropdown') as HTMLElement;
+      const rect = menu.getBoundingClientRect();
+      const topElement = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2
+      );
+      return Boolean(topElement?.closest('#elements-dropdown'));
+    });
+    expect(menuIsOnTop).toBe(true);
+
+    await page.click('#elements-btn');
+    await page.click('#export-btn');
+    await expect(page.locator('#export-dropdown')).toBeVisible();
+    const exportMenuIsOnTop = await page.evaluate(() => {
+      const menu = document.querySelector('#export-dropdown') as HTMLElement;
+      const rect = menu.getBoundingClientRect();
+      const topElement = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2
+      );
+      return Boolean(topElement?.closest('#export-dropdown'));
+    });
+    expect(exportMenuIsOnTop).toBe(true);
   });
 
   test('add image element', async ({ page }) => {

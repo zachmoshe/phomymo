@@ -15,8 +15,18 @@ export async function waitForAppReady(page: Page) {
   await page.waitForTimeout(500);
 }
 
-/** Dismiss the info dialog if it appears on first load */
+/** Dismiss startup dialogs if they appear on first load */
 export async function dismissInfoDialog(page: Page) {
+  try {
+    const warningBtn = page.locator('#compatibility-warning #dismiss-warning-btn');
+    if (await warningBtn.isVisible({ timeout: 1000 })) {
+      await warningBtn.click();
+      await page.waitForTimeout(200);
+    }
+  } catch {
+    // No compatibility warning visible, that's fine
+  }
+
   try {
     const closeBtn = page.locator('#info-dialog:not(.hidden) #info-close');
     if (await closeBtn.isVisible({ timeout: 2000 })) {
