@@ -115,7 +115,7 @@ Enter the data to encode. The QR code auto-sizes based on content length.
 
 ### Shape Properties
 
-Choose the shape type, fill style (solid, dithered grayscale, or none), stroke color, stroke width, and corner radius (rectangles only).
+Choose the shape type, fill style (transparent, solid, or dithered grayscale), stroke color, stroke width, stroke pattern (solid, dashed, dotted, or dash-dot), and corner radius (rectangles only).
 
 ![Shape properties](screenshots/03-element-properties/07-shape-properties-panel.png)
 
@@ -123,7 +123,9 @@ Choose the shape type, fill style (solid, dithered grayscale, or none), stroke c
 
 ### Position and Size
 
-All elements share position (X, Y), size (Width, Height), and rotation controls at the top of the properties panel. You can type exact values or drag elements on the canvas.
+All elements share position (X, Y), size (Width, Height), and rotation controls at the top of the properties panel. Exact measurements use millimetres by default; use the **Units** selector to switch to pixels. Your unit choice is remembered in this browser.
+
+Enable **Non-printable (template guide)** on any element that should help position template content without appearing on the finished label. Non-printable elements are shown at 50% opacity in the editor and omitted from print previews, printing, PDF, and PNG output.
 
 ![Position properties](screenshots/03-element-properties/09-position-properties.png)
 

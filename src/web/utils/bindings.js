@@ -104,6 +104,7 @@ export function bindButtonGroup(selector, property, dataAttr, elementType, ctx) 
           b.classList.toggle('bg-gray-100', isActive);
           b.classList.toggle('ring-2', isActive);
           b.classList.toggle('ring-blue-400', isActive);
+          b.setAttribute('aria-pressed', String(isActive));
         });
       }
     });
@@ -198,7 +199,7 @@ export function bindSlider(sliderSelector, displaySelector, onChange, elementTyp
  * Bind position/dimension inputs (x, y, width, height, rotation)
  * @param {Object} selectors - { x, y, width, height, rotation }
  * @param {Object} ctx - Context with getSelected, modifyElement
- * @param {Object} constraints - { maxWidth, maxHeight, minWidth, minHeight } for bounds
+ * @param {Object} constraints - Bounds plus an optional toInternal unit converter
  */
 export function bindPositionInputs(selectors, ctx, constraints = {}) {
   const {
@@ -206,19 +207,20 @@ export function bindPositionInputs(selectors, ctx, constraints = {}) {
     maxHeight = 1000,
     minWidth = 10,
     minHeight = 10,
+    toInternal = value => value,
   } = constraints;
 
   if (selectors.x) {
     $(selectors.x)?.addEventListener('change', (e) => {
       const id = ctx.getSelectedId();
-      if (id) ctx.modifyElement(id, { x: validatePosition(e.target.value, maxWidth) });
+      if (id) ctx.modifyElement(id, { x: validatePosition(toInternal(e.target.value), maxWidth) });
     });
   }
 
   if (selectors.y) {
     $(selectors.y)?.addEventListener('change', (e) => {
       const id = ctx.getSelectedId();
-      if (id) ctx.modifyElement(id, { y: validatePosition(e.target.value, maxHeight) });
+      if (id) ctx.modifyElement(id, { y: validatePosition(toInternal(e.target.value), maxHeight) });
     });
   }
 
@@ -226,7 +228,7 @@ export function bindPositionInputs(selectors, ctx, constraints = {}) {
     $(selectors.width)?.addEventListener('change', (e) => {
       const id = ctx.getSelectedId();
       // Use minWidth constraint for minimum dimension
-      if (id) ctx.modifyElement(id, { width: Math.max(minWidth, validateWidth(e.target.value, maxWidth)) });
+      if (id) ctx.modifyElement(id, { width: Math.max(minWidth, validateWidth(toInternal(e.target.value), maxWidth)) });
     });
   }
 
@@ -234,7 +236,7 @@ export function bindPositionInputs(selectors, ctx, constraints = {}) {
     $(selectors.height)?.addEventListener('change', (e) => {
       const id = ctx.getSelectedId();
       // Use minHeight constraint for minimum dimension
-      if (id) ctx.modifyElement(id, { height: Math.max(minHeight, validateHeight(e.target.value, maxHeight)) });
+      if (id) ctx.modifyElement(id, { height: Math.max(minHeight, validateHeight(toInternal(e.target.value), maxHeight)) });
     });
   }
 

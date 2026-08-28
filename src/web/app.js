@@ -1,10 +1,10 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v116
+ * v117
  */
 
-import { CanvasRenderer } from './canvas.js?v=115';
+import { CanvasRenderer } from './canvas.js?v=117';
 import { BLETransport } from './ble.js?v=103';
 import { USBTransport } from './usb.js?v=101';
 import { print, printDensityTest, isDSeriesPrinter, isP12Printer, isA30Printer, isTapePrinter, isPM241Printer, isTSPLPrinter, isRotatedPrinter, getPrinterWidthBytes, getPrinterDpi, getPrinterAlignment, getPrinterDescription, isDeviceRecognized, getMatchedPattern, loadPrinterDefinitions, getAllPrinterDefinitions, getPrinterDefinition, getCustomPrinterDefinitions, saveCustomPrinterDefinition, deleteCustomPrinterDefinition, isBuiltinPrinter, resetBuiltinPrinter, getAvailableProtocols, getAvailableLabelPresets, getDetectedDefinition } from './printer.js?v=128';
@@ -36,7 +36,7 @@ import {
   collapseToSingleZone,
   hasElementsInHigherZones,
   removeElementsInHigherZones,
-} from './elements.js?v=100';
+} from './elements.js?v=103';
 import {
   HandleType,
   getHandleAtPoint,
@@ -77,6 +77,7 @@ import {
   GUIDES,
   TOUCH,
   STORAGE_KEYS,
+  PX_PER_MM,
   M_SERIES_LABEL_SIZES,
   M_SERIES_ROUND_LABELS,
   D_SERIES_LABEL_SIZES,
@@ -84,7 +85,7 @@ import {
   D_SERIES_ROUND_LABELS,
   TAPE_LABEL_SIZES,
   PM241_LABEL_SIZES,
-} from './constants.js?v=105';
+} from './constants.js?v=107';
 import {
   bindCheckbox,
   bindToggleButton,
@@ -95,7 +96,7 @@ import {
   bindPositionInputs,
   bindAlignButtons,
   createBindingContext,
-} from './utils/bindings.js?v=100';
+} from './utils/bindings.js?v=102';
 import {
   configureErrorHandlers,
   safeAsync,
@@ -142,6 +143,7 @@ let LABEL_SIZES = { ...M_SERIES_LABEL_SIZES, ...M_SERIES_ROUND_LABELS };
 const state = {
   connectionType: 'ble',
   labelSize: { width: 40, height: 30 },
+  measurementUnit: safeStorageGet(STORAGE_KEYS.MEASUREMENT_UNIT) === 'px' ? 'px' : 'mm',
   tapeWidth: 12,  // Tape width in mm for tape printers (P12/A30), default 12mm
   elements: [],
   selectedIds: [],  // Array of selected element IDs (supports multi-select)
@@ -227,6 +229,60 @@ const state = {
 };
 
 // Note: GUIDES.SNAP_THRESHOLD, HISTORY.MAX_SIZE, and STORAGE_KEYS are imported from constants.js
+
+/**
+ * Format an internal printer-pixel measurement for the selected UI unit.
+ */
+function formatMeasurement(pixels) {
+  const value = state.measurementUnit === 'mm' ? pixels / PX_PER_MM : pixels;
+  const precision = state.measurementUnit === 'mm' ? 3 : 2;
+  return Number(value.toFixed(precision));
+}
+
+/**
+ * Convert a measurement entered in the selected UI unit to printer pixels.
+ */
+function measurementToPixels(value) {
+  const numericValue = parseFloat(value);
+  if (!Number.isFinite(numericValue)) return 0;
+  return state.measurementUnit === 'mm' ? numericValue * PX_PER_MM : numericValue;
+}
+
+/**
+ * Keep desktop and mobile measurement controls in sync.
+ */
+function updateMeasurementControls() {
+  const unit = state.measurementUnit;
+  const step = unit === 'mm' ? 0.125 : 1;
+  const minSize = unit === 'mm' ? ELEMENT.MIN_WIDTH / PX_PER_MM : ELEMENT.MIN_WIDTH;
+
+  if ($('#measurement-unit')) $('#measurement-unit').value = unit;
+  if ($('#mobile-measurement-unit')) $('#mobile-measurement-unit').value = unit;
+  $$('.prop-unit, .mobile-prop-unit').forEach(label => {
+    label.textContent = unit;
+  });
+
+  ['#prop-x', '#prop-y', '#prop-width', '#prop-height',
+   '#mobile-prop-x', '#mobile-prop-y', '#mobile-prop-width', '#mobile-prop-height']
+    .forEach(selector => {
+      const input = $(selector);
+      if (input) input.step = step;
+    });
+
+  ['#prop-width', '#prop-height', '#mobile-prop-width', '#mobile-prop-height']
+    .forEach(selector => {
+      const input = $(selector);
+      if (input) input.min = minSize;
+    });
+}
+
+function setMeasurementUnit(unit) {
+  state.measurementUnit = unit === 'px' ? 'px' : 'mm';
+  safeStorageSet(STORAGE_KEYS.MEASUREMENT_UNIT, state.measurementUnit);
+  updateMeasurementControls();
+  updatePropertiesPanel();
+  if (state.mobile.propsOpen) populateMobileProps();
+}
 
 /**
  * Get saved device-to-model mappings from localStorage
@@ -385,6 +441,7 @@ async function initLocalFonts() {
  */
 function getDitherMode(elements) {
   for (const el of elements) {
+    if (el.nonPrintable) continue;
     if (el.type === 'image' && el.dither) {
       return el.dither;
     }
@@ -1791,7 +1848,7 @@ function renderPreviewThumbnail(canvas, recordIndex) {
   ctx.fillRect(0, 0, dims.width, dims.height);
 
   // Render elements (simplified - reuse main renderer logic)
-  state.renderer.renderAllToContext(ctx, mergedElements, []);
+  state.renderer.renderAllToContext(ctx, mergedElements, [], { forPrint: true });
 }
 
 /**
@@ -1813,7 +1870,7 @@ function showFullPreview(recordIndex) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, dims.width, dims.height);
-  state.renderer.renderAllToContext(ctx, mergedElements, []);
+  state.renderer.renderAllToContext(ctx, mergedElements, [], { forPrint: true });
 
   // Update label info
   const firstField = state.templateFields[0];
@@ -2155,7 +2212,7 @@ function modifyElement(id, changes) {
   state.elements = updateElement(state.elements, id, changes);
 
   // Only clear cache if content or size changed (not just position/rotation)
-  const contentKeys = ['width', 'height', 'text', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textDecoration', 'background', 'noWrap', 'clipOverflow', 'autoScale', 'verticalAlign', 'imageData', 'barcodeData', 'barcodeFormat', 'qrData', 'brightness', 'contrast', 'dither', 'showText', 'textFontSize', 'textBold'];
+  const contentKeys = ['width', 'height', 'text', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textDecoration', 'background', 'noWrap', 'clipOverflow', 'autoScale', 'verticalAlign', 'imageData', 'barcodeData', 'barcodeFormat', 'qrData', 'brightness', 'contrast', 'dither', 'showText', 'textFontSize', 'textBold', 'shapeType', 'fill', 'stroke', 'strokeWidth', 'strokeDash', 'cornerRadius', 'nonPrintable'];
   const needsCacheClear = Object.keys(changes).some(key => contentKeys.includes(key));
   if (needsCacheClear) {
     state.renderer.clearCache(id);
@@ -2284,6 +2341,7 @@ function updateToolbarState() {
  * Update properties panel for selected element
  */
 function updatePropertiesPanel() {
+  updateMeasurementControls();
   const element = getSelected();
   const selectedCount = state.selectedIds.length;
 
@@ -2304,11 +2362,12 @@ function updatePropertiesPanel() {
   $('#props-content').classList.remove('hidden');
 
   // Update common properties
-  $('#prop-x').value = Math.round(element.x);
-  $('#prop-y').value = Math.round(element.y);
-  $('#prop-width').value = Math.round(element.width);
-  $('#prop-height').value = Math.round(element.height);
+  $('#prop-x').value = formatMeasurement(element.x);
+  $('#prop-y').value = formatMeasurement(element.y);
+  $('#prop-width').value = formatMeasurement(element.width);
+  $('#prop-height').value = formatMeasurement(element.height);
   $('#prop-rotation').value = Math.round(element.rotation || 0);
+  $('#prop-non-printable').checked = element.nonPrintable === true;
 
   // Update layer number (1-indexed for display, position in array determines z-order)
   const layerIndex = state.elements.findIndex(el => el.id === element.id);
@@ -2400,18 +2459,35 @@ function updatePropertiesPanel() {
       // Show/hide corner radius based on shape type
       const showCornerRadius = element.shapeType === 'rectangle';
       $('#prop-corner-radius-group').classList.toggle('hidden', !showCornerRadius);
-      // Update fill dropdown (map legacy values to new ones)
+      // Update fill controls (map legacy values to their current equivalents)
       let fillValue = element.fill || 'black';
       if (fillValue === 'dither-light') fillValue = 'dither-25';
       if (fillValue === 'dither-medium') fillValue = 'dither-50';
       if (fillValue === 'dither-dark') fillValue = 'dither-75';
-      $('#shape-fill').value = fillValue;
+      $$('.shape-fill-btn').forEach(btn => {
+        const isActive = btn.dataset.fill === fillValue;
+        btn.classList.toggle('bg-gray-100', isActive);
+        btn.classList.toggle('ring-2', isActive);
+        btn.classList.toggle('ring-blue-400', isActive);
+        btn.setAttribute('aria-pressed', String(isActive));
+      });
       // Update stroke buttons
       const strokeValue = element.stroke || 'none';
       $$('.stroke-btn').forEach(btn => {
-        btn.classList.toggle('bg-gray-100', btn.dataset.stroke === strokeValue);
-        btn.classList.toggle('ring-2', btn.dataset.stroke === strokeValue);
-        btn.classList.toggle('ring-blue-400', btn.dataset.stroke === strokeValue);
+        const isActive = btn.dataset.stroke === strokeValue;
+        btn.classList.toggle('bg-gray-100', isActive);
+        btn.classList.toggle('ring-2', isActive);
+        btn.classList.toggle('ring-blue-400', isActive);
+        btn.setAttribute('aria-pressed', String(isActive));
+      });
+      // Templates created before stroke patterns existed are solid by default.
+      const strokeDashValue = element.strokeDash || 'solid';
+      $$('.stroke-dash-btn').forEach(btn => {
+        const isActive = btn.dataset.dash === strokeDashValue;
+        btn.classList.toggle('bg-gray-100', isActive);
+        btn.classList.toggle('ring-2', isActive);
+        btn.classList.toggle('ring-blue-400', isActive);
+        btn.setAttribute('aria-pressed', String(isActive));
       });
       break;
   }
@@ -5042,7 +5118,7 @@ function handleExportPDF() {
   tempCtx.fillRect(0, 0, state.renderer.labelWidth, state.renderer.labelHeight);
 
   // Render elements (reuse existing render logic)
-  state.renderer.renderAllToContext(tempCtx, elementsToRender, []);
+  state.renderer.renderAllToContext(tempCtx, elementsToRender, [], { forPrint: true });
 
   // Get label dimensions in mm
   const widthMm = state.labelSize.width;
@@ -5090,7 +5166,7 @@ function handleExportPNG() {
   tempCtx.scale(scale, scale);
   tempCtx.fillStyle = 'white';
   tempCtx.fillRect(0, 0, state.renderer.labelWidth, state.renderer.labelHeight);
-  state.renderer.renderAllToContext(tempCtx, elementsToRender, []);
+  state.renderer.renderAllToContext(tempCtx, elementsToRender, [], { forPrint: true });
 
   // Download as PNG
   tempCanvas.toBlob((blob) => {
@@ -5208,6 +5284,7 @@ function updateElementsList() {
         <span class="text-gray-400 text-xs w-4">${layerNum}</span>
         ${icon}
         <span class="flex-1 truncate">${escapeHtml(label)}</span>
+        ${el.nonPrintable ? '<span class="text-[10px] font-medium text-amber-600" title="Non-printable template guide">Guide</span>' : ''}
         ${el.groupId ? '<span class="text-xs text-gray-400">G</span>' : ''}
       </button>
     `;
@@ -6311,7 +6388,30 @@ function populateMobileProps() {
   } else if (selected.type === 'shape') {
     const shapeType = selected.shapeType || 'rectangle';
     let fillValue = selected.fill || 'black';
-    const strokeValue = selected.stroke || 'black';
+    if (fillValue === 'dither-light') fillValue = 'dither-25';
+    if (fillValue === 'dither-medium') fillValue = 'dither-50';
+    if (fillValue === 'dither-dark') fillValue = 'dither-75';
+    const strokeValue = selected.stroke || 'none';
+    const strokeDashValue = selected.strokeDash || 'solid';
+    const fillOptions = [
+      ['none', 'Transparent', null],
+      ['white', 'White', '#fff'],
+      ['dither-6', '6% black dither', '#efefef'],
+      ['dither-12', '12% black dither', '#dfdfdf'],
+      ['dither-25', '25% black dither', '#bfbfbf'],
+      ['dither-37', '37% black dither', '#a0a0a0'],
+      ['dither-50', '50% black dither', '#808080'],
+      ['dither-62', '62% black dither', '#616161'],
+      ['dither-75', '75% black dither', '#404040'],
+      ['dither-87', '87% black dither', '#212121'],
+      ['dither-94', '94% black dither', '#101010'],
+      ['black', 'Black', '#000'],
+    ];
+    const fillButtons = fillOptions.map(([value, label, tone]) => `
+      <button data-mobile-fill="${value}" class="shape-control-btn ${fillValue === value ? 'is-selected' : ''}" title="${label}" aria-label="${label}" aria-pressed="${fillValue === value}">
+        <span class="shape-fill-swatch ${value === 'none' ? 'checkerboard-swatch' : ''}" ${tone ? `style="--fill-tone: ${tone}"` : ''}></span>
+      </button>
+    `).join('');
     html += `
       <div class="prop-group">
         <div class="prop-label">Shape Type</div>
@@ -6324,30 +6424,44 @@ function populateMobileProps() {
       </div>
       <div class="prop-group">
         <div class="prop-label">Fill</div>
-        <select id="mobile-prop-fill" class="prop-input">
-          <option value="none" ${fillValue === 'none' ? 'selected' : ''}>None (Outline only)</option>
-          <option value="white" ${fillValue === 'white' ? 'selected' : ''}>White (0%)</option>
-          <option value="dither-25" ${fillValue === 'dither-25' ? 'selected' : ''}>25% Gray</option>
-          <option value="dither-50" ${fillValue === 'dither-50' ? 'selected' : ''}>50% Gray</option>
-          <option value="dither-75" ${fillValue === 'dither-75' ? 'selected' : ''}>75% Gray</option>
-          <option value="black" ${fillValue === 'black' ? 'selected' : ''}>Black (100%)</option>
-        </select>
+        <div class="shape-fill-grid segmented-control mobile-shape-options" role="group" aria-label="Shape fill">
+          ${fillButtons}
+        </div>
       </div>
-      <div class="prop-group">
-        <div class="prop-label">Stroke</div>
-        <div class="flex gap-2">
-          <button class="flex-1 py-2.5 border rounded ${strokeValue === 'none' ? 'bg-blue-100 border-blue-400' : 'border-gray-300 bg-gray-50'}" data-stroke="none">None</button>
-          <button class="flex-1 py-2.5 border rounded flex items-center justify-center gap-1 ${strokeValue === 'black' ? 'bg-blue-100 border-blue-400' : 'border-gray-300 bg-gray-50'}" data-stroke="black">
-            <span class="w-4 h-4 bg-black rounded"></span> Black
-          </button>
-          <button class="flex-1 py-2.5 border rounded flex items-center justify-center gap-1 ${strokeValue === 'white' ? 'bg-blue-100 border-blue-400' : 'border-gray-300 bg-gray-50'}" data-stroke="white">
-            <span class="w-4 h-4 bg-white border border-gray-300 rounded"></span> White
-          </button>
+      <div class="prop-row">
+        <div class="prop-group flex-1">
+          <div class="prop-label">Stroke</div>
+          <div class="shape-stroke-grid segmented-control mobile-shape-options" role="group" aria-label="Stroke color">
+            <button class="shape-control-btn text-xs ${strokeValue === 'none' ? 'is-selected' : ''}" data-mobile-stroke="none" aria-pressed="${strokeValue === 'none'}">None</button>
+            <button class="shape-control-btn ${strokeValue === 'black' ? 'is-selected' : ''}" data-mobile-stroke="black" title="Black stroke" aria-label="Black stroke" aria-pressed="${strokeValue === 'black'}">
+              <span class="w-4 h-4 border-2 border-black rounded"></span>
+            </button>
+            <button class="shape-control-btn ${strokeValue === 'white' ? 'is-selected' : ''}" data-mobile-stroke="white" title="White stroke" aria-label="White stroke" aria-pressed="${strokeValue === 'white'}">
+              <span class="w-4 h-4 border-2 border-white bg-gray-400 rounded"></span>
+            </button>
+          </div>
+        </div>
+        <div class="prop-group w-24">
+          <div class="prop-label">Width</div>
+          <input type="number" id="mobile-prop-strokeWidth" class="prop-input text-center" value="${selected.strokeWidth || 2}" min="1" max="20">
         </div>
       </div>
       <div class="prop-group">
-        <div class="prop-label">Stroke Width</div>
-        <input type="number" id="mobile-prop-strokeWidth" class="prop-input" value="${selected.strokeWidth || 2}" min="1" max="20">
+        <div class="prop-label">Stroke Pattern</div>
+        <div class="stroke-pattern-grid segmented-control mobile-shape-options" role="group" aria-label="Stroke pattern">
+          <button class="shape-control-btn ${strokeDashValue === 'solid' ? 'is-selected' : ''}" data-mobile-dash="solid" title="Solid stroke" aria-label="Solid stroke" aria-pressed="${strokeDashValue === 'solid'}">
+            <span class="stroke-pattern-preview stroke-pattern-solid"></span>
+          </button>
+          <button class="shape-control-btn ${strokeDashValue === 'dashed' ? 'is-selected' : ''}" data-mobile-dash="dashed" title="Dashed stroke" aria-label="Dashed stroke" aria-pressed="${strokeDashValue === 'dashed'}">
+            <span class="stroke-pattern-preview stroke-pattern-dashed"></span>
+          </button>
+          <button class="shape-control-btn ${strokeDashValue === 'dotted' ? 'is-selected' : ''}" data-mobile-dash="dotted" title="Dotted stroke" aria-label="Dotted stroke" aria-pressed="${strokeDashValue === 'dotted'}">
+            <span class="stroke-pattern-preview stroke-pattern-dotted"></span>
+          </button>
+          <button class="shape-control-btn ${strokeDashValue === 'dash-dot' ? 'is-selected' : ''}" data-mobile-dash="dash-dot" title="Dash-dot stroke" aria-label="Dash-dot stroke" aria-pressed="${strokeDashValue === 'dash-dot'}">
+            <span class="stroke-pattern-preview stroke-pattern-dash-dot"></span>
+          </button>
+        </div>
       </div>
       ${shapeType === 'rectangle' ? `
       <div class="prop-group">
@@ -6394,28 +6508,41 @@ function populateMobileProps() {
   // Position/Size/Rotation section (collapsible, at bottom)
   html += `
     <div class="border-t border-gray-200 pt-4 mt-4">
-      <div class="prop-label text-gray-400 mb-3">Position & Size</div>
+      <label class="flex items-center gap-2 mb-4 rounded bg-amber-50 px-3 py-2 text-amber-900">
+        <input type="checkbox" id="mobile-prop-nonPrintable" class="w-5 h-5 rounded border-amber-300 text-amber-600" ${selected.nonPrintable ? 'checked' : ''}>
+        <span><span class="text-sm font-medium">Non-printable</span><span class="block text-xs text-amber-700">Visible as a 50% template guide</span></span>
+      </label>
+      <div class="flex items-center justify-between mb-3">
+        <div class="prop-label text-gray-400 mb-0">Position & Size</div>
+        <label class="flex items-center gap-2 text-xs text-gray-500">
+          Units
+          <select id="mobile-measurement-unit" class="px-2 py-1 border border-gray-200 rounded text-sm text-gray-700">
+            <option value="mm" ${state.measurementUnit === 'mm' ? 'selected' : ''}>mm</option>
+            <option value="px" ${state.measurementUnit === 'px' ? 'selected' : ''}>pixels</option>
+          </select>
+        </label>
+      </div>
       <div class="prop-group">
         <div class="prop-row">
           <div class="flex-1">
-            <label class="text-xs text-gray-500">X</label>
-            <input type="number" id="mobile-prop-x" class="prop-input" value="${Math.round(selected.x)}">
+            <label class="text-xs text-gray-500">X (<span class="mobile-prop-unit">${state.measurementUnit}</span>)</label>
+            <input type="number" id="mobile-prop-x" class="prop-input" value="${formatMeasurement(selected.x)}">
           </div>
           <div class="flex-1">
-            <label class="text-xs text-gray-500">Y</label>
-            <input type="number" id="mobile-prop-y" class="prop-input" value="${Math.round(selected.y)}">
+            <label class="text-xs text-gray-500">Y (<span class="mobile-prop-unit">${state.measurementUnit}</span>)</label>
+            <input type="number" id="mobile-prop-y" class="prop-input" value="${formatMeasurement(selected.y)}">
           </div>
         </div>
       </div>
       <div class="prop-group">
         <div class="prop-row">
           <div class="flex-1">
-            <label class="text-xs text-gray-500">Width</label>
-            <input type="number" id="mobile-prop-width" class="prop-input" value="${Math.round(selected.width)}">
+            <label class="text-xs text-gray-500">Width (<span class="mobile-prop-unit">${state.measurementUnit}</span>)</label>
+            <input type="number" id="mobile-prop-width" class="prop-input" value="${formatMeasurement(selected.width)}">
           </div>
           <div class="flex-1">
-            <label class="text-xs text-gray-500">Height</label>
-            <input type="number" id="mobile-prop-height" class="prop-input" value="${Math.round(selected.height)}">
+            <label class="text-xs text-gray-500">Height (<span class="mobile-prop-unit">${state.measurementUnit}</span>)</label>
+            <input type="number" id="mobile-prop-height" class="prop-input" value="${formatMeasurement(selected.height)}">
           </div>
         </div>
       </div>
@@ -6433,6 +6560,8 @@ function populateMobileProps() {
 
   html += '</div>';
   content.innerHTML = html;
+
+  updateMeasurementControls();
 
   // Wire up event handlers
   wireUpMobilePropHandlers(selected);
@@ -6467,11 +6596,13 @@ function wireUpMobilePropHandlers(element) {
   };
 
   // Position and size
-  $('#mobile-prop-x')?.addEventListener('change', (e) => updateProp('x', parseFloat(e.target.value)));
-  $('#mobile-prop-y')?.addEventListener('change', (e) => updateProp('y', parseFloat(e.target.value)));
-  $('#mobile-prop-width')?.addEventListener('change', (e) => updateProp('width', parseFloat(e.target.value)));
-  $('#mobile-prop-height')?.addEventListener('change', (e) => updateProp('height', parseFloat(e.target.value)));
+  $('#mobile-prop-x')?.addEventListener('change', (e) => updateProp('x', measurementToPixels(e.target.value)));
+  $('#mobile-prop-y')?.addEventListener('change', (e) => updateProp('y', measurementToPixels(e.target.value)));
+  $('#mobile-prop-width')?.addEventListener('change', (e) => updateProp('width', Math.max(ELEMENT.MIN_WIDTH, measurementToPixels(e.target.value))));
+  $('#mobile-prop-height')?.addEventListener('change', (e) => updateProp('height', Math.max(ELEMENT.MIN_HEIGHT, measurementToPixels(e.target.value))));
   $('#mobile-prop-rotation')?.addEventListener('change', (e) => updateProp('rotation', parseFloat(e.target.value)));
+  $('#mobile-prop-nonPrintable')?.addEventListener('change', (e) => updateProp('nonPrintable', e.target.checked));
+  $('#mobile-measurement-unit')?.addEventListener('change', (e) => setMeasurementUnit(e.target.value));
 
   // Text properties - use live update for typing, save history on blur
   const textInput = $('#mobile-prop-text');
@@ -6660,14 +6791,25 @@ function wireUpMobilePropHandlers(element) {
     updateProp('shapeType', e.target.value);
     populateMobileProps(); // Refresh to show/hide corner radius
   });
-  $('#mobile-prop-fill')?.addEventListener('change', (e) => updateProp('fill', e.target.value));
   $('#mobile-prop-strokeWidth')?.addEventListener('change', (e) => updateProp('strokeWidth', parseInt(e.target.value)));
   $('#mobile-prop-cornerRadius')?.addEventListener('change', (e) => updateProp('cornerRadius', parseInt(e.target.value)));
 
-  // Stroke buttons
-  $$('[data-stroke]').forEach(btn => {
+  // Shape fill, stroke color, and stroke pattern buttons
+  $$('[data-mobile-fill]').forEach(btn => {
     btn.addEventListener('click', () => {
-      updateProp('stroke', btn.dataset.stroke);
+      updateProp('fill', btn.dataset.mobileFill);
+      populateMobileProps();
+    });
+  });
+  $$('[data-mobile-stroke]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      updateProp('stroke', btn.dataset.mobileStroke);
+      populateMobileProps();
+    });
+  });
+  $$('[data-mobile-dash]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      updateProp('strokeDash', btn.dataset.mobileDash);
       populateMobileProps();
     });
   });
@@ -7564,6 +7706,12 @@ function init() {
     propsBackdrop.addEventListener('click', closePropsPanel);
   }
 
+  // Measurement units for element position and size (millimetres by default).
+  updateMeasurementControls();
+  $('#measurement-unit').addEventListener('change', (e) => {
+    setMeasurementUnit(e.target.value);
+  });
+
   // Properties panel - common position/dimension inputs (only works for single selection)
   bindPositionInputs({
     x: '#prop-x',
@@ -7574,6 +7722,12 @@ function init() {
   }, createBindingContext(state, getSelected, modifyElement), {
     minWidth: ELEMENT.MIN_WIDTH,
     minHeight: ELEMENT.MIN_HEIGHT,
+    toInternal: measurementToPixels,
+  });
+
+  $('#prop-non-printable').addEventListener('change', (e) => {
+    const id = state.selectedIds[0];
+    if (id) modifyElement(id, { nonPrintable: e.target.checked });
   });
 
   // Properties panel - text
@@ -7643,9 +7797,10 @@ function init() {
     $('#prop-corner-radius-group').classList.toggle('hidden', value !== 'rectangle');
   });
 
-  // Shape fill and stroke
-  bindSelect('#shape-fill', 'fill', 'shape', bindCtx);
+  // Shape fill, stroke color, and stroke pattern
+  bindButtonGroup('.shape-fill-btn', 'fill', 'fill', 'shape', bindCtx);
   bindButtonGroup('.stroke-btn', 'stroke', 'stroke', 'shape', bindCtx);
+  bindButtonGroup('.stroke-dash-btn', 'strokeDash', 'dash', 'shape', bindCtx);
 
   // Shape numeric inputs
   bindNumericInput('#prop-stroke-width', 'strokeWidth', 'shape', bindCtx, { min: 1, max: 20, defaultVal: 2 });

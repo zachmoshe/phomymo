@@ -5,9 +5,7 @@
 
 import { drawHandles, drawGroupHandles } from './handles.js?v=5';
 import { logError, ErrorLevel } from './utils/errors.js';
-
-// Pixels per mm (203 DPI ≈ 8 px/mm)
-const PX_PER_MM = 8;
+import { PX_PER_MM } from './constants.js?v=107';
 
 // Default printer width in bytes (72 bytes = 576 pixels for M260)
 // M110/M200 use 48 bytes (384 pixels)
@@ -188,6 +186,10 @@ export class CanvasRenderer {
       imageData: e.imageData?.substring(0, 50), // Just enough to detect changes
       barcodeData: e.barcodeData, qrData: e.qrData,
       brightness: e.brightness, contrast: e.contrast, dither: e.dither,
+      shapeType: e.shapeType, fill: e.fill, stroke: e.stroke,
+      strokeWidth: e.strokeWidth, strokeDash: e.strokeDash,
+      cornerRadius: e.cornerRadius,
+      nonPrintable: e.nonPrintable,
     }))) + `_${ditherMode}_${this.labelWidth}_${this.labelHeight}`;
 
     // Check cache
@@ -595,6 +597,7 @@ export class CanvasRenderer {
     if (this.multiLabel.enabled) {
       // Multi-label mode: render elements with zone offsets
       for (const element of elements) {
+        if (this.ditherPreview && element.nonPrintable) continue;
         const zone = this.multiLabel.zones[element.zone ?? 0];
         if (zone) {
           // Create offset element for rendering
@@ -609,6 +612,7 @@ export class CanvasRenderer {
     } else {
       // Single label mode
       for (const element of elements) {
+        if (this.ditherPreview && element.nonPrintable) continue;
         this.renderElement(element);
       }
     }
@@ -761,8 +765,9 @@ export class CanvasRenderer {
    * @param {CanvasRenderingContext2D} ctx - External canvas context
    * @param {Array} elements - Elements to render
    * @param {Array} selectedIds - Selected element IDs (usually empty for previews)
+   * @param {Object} options - Set forPrint to omit non-printable template guides
    */
-  renderAllToContext(ctx, elements, selectedIds = []) {
+  renderAllToContext(ctx, elements, selectedIds = [], options = {}) {
     // Save original context
     const originalCtx = this.ctx;
 
@@ -772,6 +777,7 @@ export class CanvasRenderer {
     // Render elements (with zone offsets if multi-label mode)
     if (this.multiLabel.enabled) {
       for (const element of elements) {
+        if (options.forPrint && element.nonPrintable) continue;
         const zone = this.multiLabel.zones[element.zone ?? 0];
         if (zone) {
           const offsetElement = {
@@ -784,6 +790,7 @@ export class CanvasRenderer {
       }
     } else {
       for (const element of elements) {
+        if (options.forPrint && element.nonPrintable) continue;
         this.renderElement(element);
       }
     }
@@ -857,6 +864,11 @@ export class CanvasRenderer {
     const { x, y, width, height, rotation, type } = element;
 
     this.ctx.save();
+
+    // Non-printable elements remain visible as design guides in the editor.
+    if (element.nonPrintable) {
+      this.ctx.globalAlpha *= 0.5;
+    }
 
     // Move to element center
     const cx = x + width / 2;
@@ -1366,6 +1378,12 @@ export class CanvasRenderer {
    */
   renderShapeElement(element, width, height) {
     const { shapeType, fill, stroke, strokeWidth, cornerRadius } = element;
+    const strokeDash = element.strokeDash || 'solid';
+
+    this.ctx.save();
+    this.ctx.setLineDash(this.getStrokeDashPattern(strokeDash, strokeWidth));
+    this.ctx.lineDashOffset = 0;
+    this.ctx.lineCap = strokeDash === 'dotted' ? 'round' : 'butt';
 
     // Draw based on shape type
     switch (shapeType) {
@@ -1378,11 +1396,37 @@ export class CanvasRenderer {
       case 'triangle':
         this.drawTriangle(width, height, fill, stroke, strokeWidth);
         break;
-      case 'line':
-        this.drawLine(width, height, stroke || fill, strokeWidth);
+      case 'line': {
+        // Older templates used the fill color for lines. Keep that fallback while
+        // treating newly-created lines as stroke-only shapes.
+        const lineColor = stroke && stroke !== 'none'
+          ? stroke
+          : (fill && fill !== 'none' ? fill : 'none');
+        if (lineColor !== 'none') this.drawLine(width, height, lineColor, strokeWidth);
         break;
+      }
       default:
         this.drawRectangle(width, height, 0, fill, stroke, strokeWidth);
+    }
+
+    this.ctx.restore();
+  }
+
+  /**
+   * Convert the editor's stroke style into a Canvas 2D dash pattern.
+   * Pattern lengths scale with stroke width so heavy outlines stay legible.
+   */
+  getStrokeDashPattern(strokeDash = 'solid', strokeWidth = 2) {
+    const unit = Math.max(1, strokeWidth || 2);
+    switch (strokeDash) {
+      case 'dashed':
+        return [4 * unit, 2.5 * unit];
+      case 'dotted':
+        return [0.5 * unit, 2.5 * unit];
+      case 'dash-dot':
+        return [4 * unit, 2 * unit, 0.5 * unit, 2 * unit];
+      default:
+        return [];
     }
   }
 
@@ -1598,7 +1642,6 @@ export class CanvasRenderer {
     this.ctx.lineTo(width / 2, 0);
     this.ctx.strokeStyle = color || 'black';
     this.ctx.lineWidth = strokeWidth || 2;
-    this.ctx.lineCap = 'round';
     this.ctx.stroke();
   }
 
@@ -1855,6 +1898,7 @@ export class CanvasRenderer {
     this.ctx = tempCtx;
     if (this.multiLabel.enabled) {
       for (const element of elements) {
+        if (element.nonPrintable) continue;
         const zone = this.multiLabel.zones[element.zone ?? 0];
         if (zone) {
           const offsetElement = {
@@ -1867,6 +1911,7 @@ export class CanvasRenderer {
       }
     } else {
       for (const element of elements) {
+        if (element.nonPrintable) continue;
         this.renderElement(element);
       }
     }

@@ -482,8 +482,9 @@
       <!-- Shape dropdown -->
       <div class="relative flex items-center">
         <button id="add-shape-btn" class="toolbar-btn toolbar-btn-menu" title="Add Shape">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"/></svg>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3.5" y="4" width="8" height="8" rx="1.25" stroke-width="1.8"/><circle cx="16" cy="16" r="4.5" stroke-width="1.8"/></svg>
           <span class="hidden sm:inline">Shape</span>
+          <svg class="shape-menu-chevron w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
         </button>
         <div id="shape-dropdown" class="hidden absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-[60] py-1 min-w-[120px]">
           <button data-shape="rectangle" class="shape-option w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 flex items-center gap-2">
@@ -736,16 +737,27 @@
     <div id="props-backdrop"></div>
 
     <!-- Properties Panel -->
-    <aside id="props-panel" class="fixed md:relative inset-y-0 right-0 w-72 sm:w-64 bg-white border-l border-gray-200 p-4 overflow-y-auto flex-shrink-0 z-50 transform translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out shadow-xl md:shadow-none">
+    <aside id="props-panel" class="inspector-panel fixed md:relative inset-y-0 right-0 w-72 sm:w-64 bg-white border-l border-gray-200 p-4 overflow-y-auto flex-shrink-0 z-50 transform translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out shadow-xl md:shadow-none">
       <!-- Mobile Close Button -->
       <button id="props-close" class="md:hidden absolute top-3 right-3 p-1 text-gray-400 hover:text-gray-600">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
-      <h2 class="text-sm font-semibold text-gray-900 mb-4">Properties</h2>
+      <div class="flex items-center justify-between gap-2 mb-4">
+        <h2 class="text-sm font-semibold text-gray-900">Properties</h2>
+        <label class="flex items-center gap-1 text-[10px] text-gray-400 uppercase tracking-wide">
+          Units
+          <select id="measurement-unit" class="px-1.5 py-1 text-xs normal-case text-gray-700 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400">
+            <option value="mm" selected>mm</option>
+            <option value="px">pixels</option>
+          </select>
+        </label>
+      </div>
 
       <!-- No Selection State -->
       <div id="props-empty" class="text-sm text-gray-400 text-center py-8">
-        Click an element to select it,<br>or add a new element.
+        <span class="empty-state-icon" aria-hidden="true"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m5 4 13 7-6 2-2 6L5 4Z"/></svg></span>
+        <span class="empty-state-title">Nothing selected</span>
+        Select an element on the label<br>to edit its properties.
       </div>
 
       <!-- Element Properties -->
@@ -755,20 +767,20 @@
           <!-- Position & Size: X, Y, W, H in a single row -->
           <div class="grid grid-cols-4 gap-1.5">
             <div>
-              <label class="text-[10px] text-gray-400 uppercase tracking-wide">X</label>
-              <input type="number" id="prop-x" class="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <label class="text-[10px] text-gray-400 uppercase tracking-wide">X <span class="prop-unit normal-case">mm</span></label>
+              <input type="number" id="prop-x" step="0.125" class="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400">
             </div>
             <div>
-              <label class="text-[10px] text-gray-400 uppercase tracking-wide">Y</label>
-              <input type="number" id="prop-y" class="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <label class="text-[10px] text-gray-400 uppercase tracking-wide">Y <span class="prop-unit normal-case">mm</span></label>
+              <input type="number" id="prop-y" step="0.125" class="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400">
             </div>
             <div>
-              <label class="text-[10px] text-gray-400 uppercase tracking-wide">W</label>
-              <input type="number" id="prop-width" class="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400" min="10">
+              <label class="text-[10px] text-gray-400 uppercase tracking-wide">W <span class="prop-unit normal-case">mm</span></label>
+              <input type="number" id="prop-width" step="0.125" class="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400" min="1.25">
             </div>
             <div>
-              <label class="text-[10px] text-gray-400 uppercase tracking-wide">H</label>
-              <input type="number" id="prop-height" class="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400" min="10">
+              <label class="text-[10px] text-gray-400 uppercase tracking-wide">H <span class="prop-unit normal-case">mm</span></label>
+              <input type="number" id="prop-height" step="0.125" class="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400" min="1.25">
             </div>
           </div>
           <!-- Rotation & Layer on same row -->
@@ -787,6 +799,10 @@
               </div>
             </div>
           </div>
+          <label class="flex items-center gap-2 cursor-pointer rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-900" title="Keep this element visible as a template guide, but omit it from printing and output exports">
+            <input type="checkbox" id="prop-non-printable" class="w-3.5 h-3.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500">
+            <span><span class="font-medium">Non-printable</span> <span class="text-amber-700">(template guide)</span></span>
+          </label>
         </div>
 
         <hr class="my-3 border-gray-200">
@@ -1090,30 +1106,55 @@
           <!-- Fill -->
           <div>
             <label class="text-[10px] text-gray-400 uppercase tracking-wide">Fill</label>
-            <select id="shape-fill" class="prop-input">
-              <option value="white">White (0%)</option>
-              <option value="dither-6">6% Gray</option>
-              <option value="dither-12">12% Gray</option>
-              <option value="dither-25">25% Gray</option>
-              <option value="dither-37">37% Gray</option>
-              <option value="dither-50">50% Gray</option>
-              <option value="dither-62">62% Gray</option>
-              <option value="dither-75">75% Gray</option>
-              <option value="dither-87">87% Gray</option>
-              <option value="dither-94">94% Gray</option>
-              <option value="black">Black (100%)</option>
-            </select>
+            <div class="shape-fill-grid segmented-control" role="group" aria-label="Shape fill">
+              <button data-fill="none" class="shape-fill-btn shape-control-btn" title="Transparent fill" aria-label="Transparent fill">
+                <span class="shape-fill-swatch checkerboard-swatch"></span>
+              </button>
+              <button data-fill="white" class="shape-fill-btn shape-control-btn" title="White (0% black)" aria-label="White fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #fff"></span>
+              </button>
+              <button data-fill="dither-6" class="shape-fill-btn shape-control-btn" title="6% black dither" aria-label="6% black dither fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #efefef"></span>
+              </button>
+              <button data-fill="dither-12" class="shape-fill-btn shape-control-btn" title="12% black dither" aria-label="12% black dither fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #dfdfdf"></span>
+              </button>
+              <button data-fill="dither-25" class="shape-fill-btn shape-control-btn" title="25% black dither" aria-label="25% black dither fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #bfbfbf"></span>
+              </button>
+              <button data-fill="dither-37" class="shape-fill-btn shape-control-btn" title="37% black dither" aria-label="37% black dither fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #a0a0a0"></span>
+              </button>
+              <button data-fill="dither-50" class="shape-fill-btn shape-control-btn" title="50% black dither" aria-label="50% black dither fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #808080"></span>
+              </button>
+              <button data-fill="dither-62" class="shape-fill-btn shape-control-btn" title="62% black dither" aria-label="62% black dither fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #616161"></span>
+              </button>
+              <button data-fill="dither-75" class="shape-fill-btn shape-control-btn" title="75% black dither" aria-label="75% black dither fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #404040"></span>
+              </button>
+              <button data-fill="dither-87" class="shape-fill-btn shape-control-btn" title="87% black dither" aria-label="87% black dither fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #212121"></span>
+              </button>
+              <button data-fill="dither-94" class="shape-fill-btn shape-control-btn" title="94% black dither" aria-label="94% black dither fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #101010"></span>
+              </button>
+              <button data-fill="black" class="shape-fill-btn shape-control-btn" title="Black (100%)" aria-label="Black fill">
+                <span class="shape-fill-swatch" style="--fill-tone: #000"></span>
+              </button>
+            </div>
           </div>
           <!-- Stroke & Width -->
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="text-[10px] text-gray-400 uppercase tracking-wide">Stroke</label>
-              <div class="flex border border-gray-200 rounded overflow-hidden">
-                <button data-stroke="none" class="stroke-btn flex-1 py-1 hover:bg-gray-50 text-[10px]" title="No stroke">None</button>
-                <button data-stroke="black" class="stroke-btn flex-1 py-1 hover:bg-gray-50 border-l border-gray-200" title="Black stroke">
+              <div class="segmented-control shape-stroke-grid" role="group" aria-label="Stroke color">
+                <button data-stroke="none" class="stroke-btn shape-control-btn text-[10px]" title="No stroke">None</button>
+                <button data-stroke="black" class="stroke-btn shape-control-btn" title="Black stroke" aria-label="Black stroke">
                   <span class="block w-3 h-3 mx-auto rounded-sm border-2 border-black bg-transparent"></span>
                 </button>
-                <button data-stroke="white" class="stroke-btn flex-1 py-1 hover:bg-gray-50 border-l border-gray-200" title="White stroke">
+                <button data-stroke="white" class="stroke-btn shape-control-btn" title="White stroke" aria-label="White stroke">
                   <span class="block w-3 h-3 mx-auto rounded-sm border-2 border-white bg-gray-400"></span>
                 </button>
               </div>
@@ -1121,6 +1162,24 @@
             <div>
               <label class="text-[10px] text-gray-400 uppercase tracking-wide">Width</label>
               <input type="number" id="prop-stroke-width" class="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 text-center" min="1" max="20" value="2">
+            </div>
+          </div>
+          <!-- Stroke Pattern -->
+          <div>
+            <label class="text-[10px] text-gray-400 uppercase tracking-wide">Stroke Pattern</label>
+            <div class="segmented-control stroke-pattern-grid" role="group" aria-label="Stroke pattern">
+              <button data-dash="solid" class="stroke-dash-btn shape-control-btn" title="Solid stroke" aria-label="Solid stroke">
+                <span class="stroke-pattern-preview stroke-pattern-solid"></span>
+              </button>
+              <button data-dash="dashed" class="stroke-dash-btn shape-control-btn" title="Dashed stroke" aria-label="Dashed stroke">
+                <span class="stroke-pattern-preview stroke-pattern-dashed"></span>
+              </button>
+              <button data-dash="dotted" class="stroke-dash-btn shape-control-btn" title="Dotted stroke" aria-label="Dotted stroke">
+                <span class="stroke-pattern-preview stroke-pattern-dotted"></span>
+              </button>
+              <button data-dash="dash-dot" class="stroke-dash-btn shape-control-btn" title="Dash-dot stroke" aria-label="Dash-dot stroke">
+                <span class="stroke-pattern-preview stroke-pattern-dash-dot"></span>
+              </button>
             </div>
           </div>
           <!-- Corner Radius (for rectangles) -->

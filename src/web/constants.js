@@ -39,6 +39,9 @@ export const ELEMENT = {
   MIN_HEIGHT: 10,
 };
 
+// Canvas element coordinates use the printer's native 203 DPI grid.
+export const PX_PER_MM = 8;
+
 // =============================================================================
 // LABEL DIMENSIONS
 // =============================================================================
@@ -137,6 +140,7 @@ export const STORAGE_KEYS = {
   MULTI_LABEL_PRESETS: 'phomymo_multi_label_presets',
   LOCAL_FONTS_ENABLED: 'phomymo_local_fonts_enabled',
   CUSTOM_PRINTERS: 'phomymo_custom_printers',
+  MEASUREMENT_UNIT: 'phomymo_measurement_unit',
 };
 
 // =============================================================================
@@ -257,6 +261,7 @@ export const DEFAULTS = {
     fill: 'none',
     stroke: 'black',
     strokeWidth: 2,
+    strokeDash: 'solid',
     cornerRadius: 0,
   },
 };

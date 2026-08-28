@@ -23,6 +23,7 @@ export function createTextElement(text = 'Text', options = {}) {
     width: options.width ?? 150,
     height: options.height ?? 40,
     rotation: options.rotation ?? 0,
+    nonPrintable: options.nonPrintable ?? false,
     // Text-specific
     text: text,
     fontSize: options.fontSize ?? 24,
@@ -53,6 +54,7 @@ export function createImageElement(imageData, options = {}) {
     width: options.width ?? 100,
     height: options.height ?? 100,
     rotation: options.rotation ?? 0,
+    nonPrintable: options.nonPrintable ?? false,
     // Image-specific
     imageData: imageData, // Base64 data URL
     naturalWidth: options.naturalWidth ?? 100,
@@ -74,6 +76,7 @@ export function createBarcodeElement(data = '123456789012', options = {}) {
     width: options.width ?? 180,
     height: options.height ?? 80,
     rotation: options.rotation ?? 0,
+    nonPrintable: options.nonPrintable ?? false,
     // Barcode-specific
     barcodeData: data,
     barcodeFormat: options.barcodeFormat ?? 'CODE128',
@@ -93,6 +96,7 @@ export function createQRElement(data = 'https://example.com', options = {}) {
     width: options.width ?? 100,
     height: options.height ?? 100,
     rotation: options.rotation ?? 0,
+    nonPrintable: options.nonPrintable ?? false,
     // QR-specific
     qrData: data,
   };
@@ -113,11 +117,13 @@ export function createShapeElement(shapeType = 'rectangle', options = {}) {
     width: options.width ?? 80,
     height: options.height ?? 60,
     rotation: options.rotation ?? 0,
+    nonPrintable: options.nonPrintable ?? false,
     // Shape-specific
     shapeType: shapeType,                         // 'rectangle', 'ellipse', 'line', 'triangle'
-    fill: options.fill ?? 'black',                // 'white', 'black', 'dither-light', 'dither-medium', 'dither-dark'
-    stroke: options.stroke ?? 'none',             // 'none', 'black', 'white'
+    fill: options.fill ?? 'none',
+    stroke: options.stroke ?? 'black',
     strokeWidth: options.strokeWidth ?? 2,        // Stroke width in pixels
+    strokeDash: options.strokeDash ?? 'solid',    // 'solid', 'dashed', 'dotted', 'dash-dot'
     cornerRadius: options.cornerRadius ?? 0,      // For rounded rectangles
   };
 }
