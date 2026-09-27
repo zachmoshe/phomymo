@@ -27,7 +27,7 @@ python3 -m http.server 8080
 
 ## Features
 
-**Design Elements** - Text (multiple fonts including local system fonts, sizes, styles, alignment, background colors, and a Labels mode that turns words into automatically wrapping rounded badges), images with scale/aspect lock, barcodes (Code128, EAN-13, UPC-A, Code39), QR codes, and shapes (rectangle, ellipse, triangle, line) with transparent, solid, or dithered fills and solid, dashed, dotted, or dash-dot strokes.
+**Design Elements** - Text (multiple fonts including local system fonts, sizes, styles, alignment, background colors, and a Labels mode that turns words or phrases wrapped in ASCII quotes or Hebrew gershayim into automatically wrapping rounded badges), images with scale/aspect lock, barcodes (Code128, EAN-13, UPC-A, Code39), QR codes, and shapes (rectangle, ellipse, triangle, line) with transparent, solid, or dithered fills and solid, dashed, dotted, or dash-dot strokes.
 
 **Editing** - Drag to move, corner/edge resize handles, rotation. Multi-select (Shift+click), grouping (Ctrl/Cmd+G), undo/redo, keyboard nudge, layer ordering, clipboard image paste (Ctrl/Cmd+V). Pin an element's placement to protect its position, size, and rotation while keeping its content and style editable.
 

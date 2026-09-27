@@ -91,7 +91,7 @@ Click any element on the canvas to select it. The properties panel on the right 
 
 Text elements have the most options: font family, size, bold/italic/underline, text color, background color, horizontal and vertical alignment, word wrap, and auto-scale.
 
-Use the **Display** setting to switch from **Plain text** to **Labels (word badges)**. Labels mode treats whitespace-separated words as individual rounded badges, places them side by side, and automatically wraps them onto additional lines. Explicit newlines still force a new row, and template fields or date expressions are substituted before the badges are laid out for printing.
+Use the **Display** setting to switch from **Plain text** to **Labels (word badges)**. Labels mode treats whitespace-separated words as individual rounded badges, places them side by side, and automatically wraps them onto additional lines. Wrap a phrase in ASCII double quotes or Hebrew gershayim to keep it in one badge: `"Zach Moshe" coffee beans` and `״צח משה״ קפה פולים` each produce three badges. Use `\"` or `\״` when the badge itself needs that quote character. Explicit newlines still force a new row, and template fields or date expressions are substituted before the badges are laid out for printing.
 
 ![Text properties panel](screenshots/03-element-properties/01-text-properties-panel.png)
 

@@ -1146,7 +1146,70 @@ export class CanvasRenderer {
   }
 
   /**
-   * Measure whitespace-separated words into badge rows.
+   * Split label text into badges. ASCII double quotes and Hebrew gershayim
+   * group multiple words into one badge; escaped quotes/backslashes remain.
+   */
+  tokenizeLabelBadges(paragraph) {
+    const tokens = [];
+    let token = '';
+    let tokenStarted = false;
+    let inQuotes = false;
+    const isGroupingQuote = value => value === '"' || value === '״';
+
+    const flushToken = () => {
+      if (tokenStarted) tokens.push(token);
+      token = '';
+      tokenStarted = false;
+    };
+
+    for (let index = 0; index < paragraph.length;) {
+      const char = paragraph[index];
+      const next = paragraph[index + 1];
+
+      if (!inQuotes && /\s/.test(char)) {
+        flushToken();
+        index += 1;
+        continue;
+      }
+
+      if (char === '\\' && (isGroupingQuote(next) || next === '\\')) {
+        token += next;
+        tokenStarted = true;
+        index += 2;
+        continue;
+      }
+
+      if (isGroupingQuote(char)) {
+        inQuotes = !inQuotes;
+        tokenStarted = true;
+        index += 1;
+        continue;
+      }
+
+      // Keep unresolved template fields and expressions intact in the editor;
+      // their substituted values are tokenized normally when previews print.
+      if (!inQuotes && (paragraph.startsWith('{{', index) || paragraph.startsWith('[[', index))) {
+        const closing = paragraph.startsWith('{{', index) ? '}}' : ']]';
+        const closingIndex = paragraph.indexOf(closing, index + 2);
+        if (closingIndex !== -1) {
+          token += paragraph.slice(index, closingIndex + 2);
+          tokenStarted = true;
+          index = closingIndex + 2;
+          continue;
+        }
+      }
+
+      token += char;
+      tokenStarted = true;
+      index += 1;
+    }
+
+    flushToken();
+    return tokens;
+  }
+
+  /**
+   * Measure label tokens into badge rows.
    * Explicit newlines always begin a new row; noWrap disables width wrapping.
    */
   layoutLabelBadges(text, maxWidth, fontSize, fontFamily = 'Inter, sans-serif', fontWeight = 'normal', fontStyle = 'normal', noWrap = false) {
@@ -1162,11 +1225,7 @@ export class CanvasRenderer {
     const rows = [];
 
     for (const paragraph of text.split('\n')) {
-      // Keep unresolved template fields and expressions intact in the editor;
-      // their substituted values are split normally when previews print.
-      const words = paragraph.trim()
-        ? (paragraph.match(/\{\{[^}]*\}\}|\[\[[^\]]*\]\]|[^\s]+/g) || [])
-        : [];
+      const words = this.tokenizeLabelBadges(paragraph);
       if (words.length === 0) {
         rows.push({ badges: [], width: 0 });
         continue;
