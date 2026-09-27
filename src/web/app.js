@@ -58,7 +58,7 @@ import {
   loadDesign,
   listDesigns,
   deleteDesign,
-} from './storage.js?v=105';
+} from './storage.js?v=106';
 import {
   extractFields,
   hasTemplateFields,
@@ -5497,12 +5497,24 @@ function shouldShowInfoOnLoad() {
 }
 
 /**
- * Show save dialog
+ * Show the naming dialog used for a first save or Save As.
  */
-function showSaveDialog() {
+function showSaveDialog({ saveAs = false } = {}) {
+  const designs = listDesigns();
+  const existingSelect = $('#save-existing');
+  const existingWrap = $('#save-existing-wrap');
+
+  existingSelect.replaceChildren(new Option('Choose a saved design...', ''));
+  designs.forEach(({ name }) => existingSelect.add(new Option(name, name)));
+  existingWrap.classList.toggle('hidden', designs.length === 0);
+
+  const suggestedName = saveAs ? (state.currentDesignName || '') : '';
+  $('#save-dialog-title').textContent = saveAs ? 'Save As' : 'Save Design';
+  $('#save-name').value = suggestedName;
+  existingSelect.value = designs.some(design => design.name === suggestedName) ? suggestedName : '';
   $('#save-dialog').classList.remove('hidden');
-  $('#save-name').value = '';
   $('#save-name').focus();
+  $('#save-name').select();
 }
 
 /**
@@ -5559,45 +5571,46 @@ function handleNewDesign() {
 }
 
 /**
- * Save current design
+ * Build the persistable form of the current design.
  */
-function handleSave() {
-  const nameValidation = validateDesignName($('#save-name').value);
-  if (!nameValidation.valid) {
-    setStatus(nameValidation.error);
-    return;
+function getCurrentDesignData() {
+  synchronizeMirrors();
+  const designData = {
+    elements: state.elements,
+    labelSize: state.labelSize,
+    editorRotation: state.editorRotation,
+  };
+
+  // Include template data and its explicit column schema if present
+  const templateColumns = getTemplateDataColumns();
+  if (state.templateFields.length > 0 || templateColumns.length > 0) {
+    designData.isTemplate = true;
   }
-  const name = nameValidation.sanitized;
+  if (state.templateFields.length > 0) {
+    designData.templateFields = state.templateFields;
+  }
+  if (templateColumns.length > 0) {
+    designData.templateColumns = templateColumns;
+  }
+  if (state.templateData.length > 0) {
+    designData.templateData = state.templateData;
+  }
 
+  // Include multi-label config if enabled
+  if (state.multiLabel.enabled) {
+    designData.multiLabel = { ...state.multiLabel };
+  }
+
+  return designData;
+}
+
+/**
+ * Persist the current design under a known name.
+ */
+function saveCurrentDesign(name) {
   try {
-    synchronizeMirrors();
-    const designData = {
-      elements: state.elements,
-      labelSize: state.labelSize,
-      editorRotation: state.editorRotation,
-    };
+    saveDesign(name, getCurrentDesignData());
 
-    // Include template data and its explicit column schema if present
-    const templateColumns = getTemplateDataColumns();
-    if (state.templateFields.length > 0 || templateColumns.length > 0) {
-      designData.isTemplate = true;
-    }
-    if (state.templateFields.length > 0) {
-      designData.templateFields = state.templateFields;
-    }
-    if (templateColumns.length > 0) {
-      designData.templateColumns = templateColumns;
-    }
-    if (state.templateData.length > 0) {
-      designData.templateData = state.templateData;
-    }
-
-    // Include multi-label config if enabled
-    if (state.multiLabel.enabled) {
-      designData.multiLabel = { ...state.multiLabel };
-    }
-
-    saveDesign(name, designData);
     hideSaveDialog();
 
     // Update current design name and mobile display
@@ -5612,6 +5625,31 @@ function handleSave() {
     showToast(e.message, 'error');
     setStatus(e.message);
   }
+}
+
+/**
+ * Save over the currently loaded/saved design, or ask for a name on first save.
+ */
+function handleSave() {
+  if (!state.currentDesignName) {
+    showSaveDialog();
+    return;
+  }
+
+  saveCurrentDesign(state.currentDesignName);
+}
+
+/**
+ * Save the current design using the editable name from the naming dialog.
+ */
+function handleSaveDialogConfirm() {
+  const nameValidation = validateDesignName($('#save-name').value);
+  if (!nameValidation.valid) {
+    setStatus(nameValidation.error);
+    return;
+  }
+
+  saveCurrentDesign(nameValidation.sanitized);
 }
 
 /**
@@ -6554,7 +6592,11 @@ function initMobileUI() {
   });
   $('#mobile-save-btn')?.addEventListener('click', () => {
     closeMobileMenu();
-    showSaveDialog();
+    handleSave();
+  });
+  $('#mobile-save-as-btn')?.addEventListener('click', () => {
+    closeMobileMenu();
+    showSaveDialog({ saveAs: true });
   });
   $('#mobile-load-btn')?.addEventListener('click', () => {
     closeMobileMenu();
@@ -8407,11 +8449,15 @@ function init() {
 
   // New/Save/Load
   $('#new-btn').addEventListener('click', handleNewDesign);
-  $('#save-btn').addEventListener('click', showSaveDialog);
+  $('#save-btn').addEventListener('click', handleSave);
+  $('#save-as-btn').addEventListener('click', () => showSaveDialog({ saveAs: true }));
   $('#save-cancel').addEventListener('click', hideSaveDialog);
-  $('#save-confirm').addEventListener('click', handleSave);
+  $('#save-confirm').addEventListener('click', handleSaveDialogConfirm);
+  $('#save-existing').addEventListener('change', (e) => {
+    if (e.target.value) $('#save-name').value = e.target.value;
+  });
   $('#save-name').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleSave();
+    if (e.key === 'Enter') handleSaveDialogConfirm();
   });
 
   $('#load-btn').addEventListener('click', showLoadDialog);

@@ -435,6 +435,10 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
             <span class="hidden sm:inline">Save</span>
           </button>
+          <button id="save-as-btn" class="toolbar-btn" title="Save as a new or existing design">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V5a2 2 0 012-2h7l4 4v10a2 2 0 01-2 2h-2M5 8h7l4 4v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-9a2 2 0 012-2z"/></svg>
+            <span class="hidden xl:inline">Save As</span>
+          </button>
           <button id="load-btn" class="toolbar-btn" title="Load">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
             <span class="hidden sm:inline">Load</span>
@@ -1284,8 +1288,15 @@
   <!-- Save Dialog -->
   <div id="save-dialog" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
     <div class="bg-white rounded-xl p-6 w-80 shadow-xl">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Save Design</h3>
-      <input type="text" id="save-name" class="prop-input mb-4" placeholder="Design name">
+      <h3 id="save-dialog-title" class="text-lg font-semibold text-gray-900 mb-4">Save Design</h3>
+      <div id="save-existing-wrap" class="hidden mb-3">
+        <label for="save-existing" class="block text-xs font-medium text-gray-600 mb-1">Overwrite an existing design</label>
+        <select id="save-existing" class="prop-input">
+          <option value="">Choose a saved design...</option>
+        </select>
+      </div>
+      <label for="save-name" class="block text-xs font-medium text-gray-600 mb-1">Design name</label>
+      <input type="text" id="save-name" class="prop-input mb-4" placeholder="Design name" autocomplete="off">
       <div class="flex gap-2">
         <button id="save-cancel" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
         <button id="save-confirm" class="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800">Save</button>
@@ -2131,6 +2142,12 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
             </svg>
             Save Design
+          </button>
+          <button id="mobile-save-as-btn" class="w-full px-3 py-2.5 text-left text-sm hover:bg-gray-100 active:bg-gray-200 rounded-lg flex items-center gap-3">
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V5a2 2 0 012-2h7l4 4v10a2 2 0 01-2 2h-2M5 8h7l4 4v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-9a2 2 0 012-2z"/>
+            </svg>
+            Save As
           </button>
           <button id="mobile-load-btn" class="w-full px-3 py-2.5 text-left text-sm hover:bg-gray-100 active:bg-gray-200 rounded-lg flex items-center gap-3">
             <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

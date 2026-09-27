@@ -45,7 +45,7 @@ python3 -m http.server 8080
 
 **Print Preview** - Toggle dither preview to see exact thermal print output before printing.
 
-**Export** - Save/load designs to browser storage, export/import as JSON, export to PDF or PNG.
+**Export** - Save/load designs to browser storage, update the currently loaded design with **Save**, duplicate or overwrite named designs with **Save As**, export/import as JSON, and export to PDF or PNG.
 
 **Mobile** - Full-featured touch UI with pinch-to-zoom, two-finger pan, slide-up property panels, and complete feature parity with desktop.
 
