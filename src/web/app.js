@@ -1,13 +1,13 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v168
+ * v172
  */
 
 import { CanvasRenderer } from './canvas.js?v=124';
-import { BLETransport } from './ble.js?v=103';
+import { BLETransport } from './ble.js?v=104';
 import { USBTransport } from './usb.js?v=101';
-import { print, printDensityTest, isDSeriesPrinter, isP12Printer, isA30Printer, isTapePrinter, isPM241Printer, isTSPLPrinter, isRotatedPrinter, getPrinterWidthBytes, getPrinterDpi, getPrinterAlignment, getPrinterDescription, isDeviceRecognized, getMatchedPattern, loadPrinterDefinitions, getAllPrinterDefinitions, getPrinterDefinition, getCustomPrinterDefinitions, saveCustomPrinterDefinition, deleteCustomPrinterDefinition, isBuiltinPrinter, resetBuiltinPrinter, getAvailableProtocols, getAvailableLabelPresets, getDetectedDefinition } from './printer.js?v=128';
+import { print, printDensityTest, isDSeriesPrinter, isP12Printer, isA30Printer, isTapePrinter, isPM241Printer, isTSPLPrinter, isRotatedPrinter, getPrinterWidthBytes, getPrinterDpi, getPrinterAlignment, getPrinterDescription, isDeviceRecognized, getMatchedPattern, loadPrinterDefinitions, getAllPrinterDefinitions, getPrinterDefinition, getCustomPrinterDefinitions, saveCustomPrinterDefinition, deleteCustomPrinterDefinition, isBuiltinPrinter, resetBuiltinPrinter, getAvailableProtocols, getAvailableLabelPresets, getDetectedDefinition } from './printer.js?v=131';
 import {
   createTextElement,
   createImageElement,
@@ -2236,7 +2236,6 @@ async function handleBatchPrint() {
 
   const btn = $('#template-print-btn');
   const originalText = btn.textContent;
-  const { density, feed, printerModel } = state.printSettings;
 
   // Calculate total prints based on multi-label mode
   const isMultiLabel = state.multiLabel.enabled;
@@ -2264,6 +2263,9 @@ async function handleBatchPrint() {
       }
       showTemplateDataDialog();
     }
+
+    // Connecting can resolve a different model; snapshot settings afterwards.
+    const { density, feed, printerModel } = state.printSettings;
 
     // Show progress modal
     const labelText = isMultiLabel && !cloneMode
@@ -2375,7 +2377,6 @@ async function handlePrintSinglePreview() {
 
   const btn = $('#full-preview-print');
   const originalText = btn.textContent;
-  const { density, feed, printerModel } = state.printSettings;
 
   try {
     btn.disabled = true;
@@ -2391,6 +2392,9 @@ async function handlePrintSinglePreview() {
         throw new Error('Please connect to printer first');
       }
     }
+
+    // Connecting can resolve a different model; snapshot settings afterwards.
+    const { density, feed, printerModel } = state.printSettings;
 
     // Substitute fields and evaluate expressions
     const substitutedElements = substituteFields(state.elements, record);
@@ -5370,12 +5374,14 @@ async function handleConnect(event) {
 
     // Set up printer info callback and query status (BLE only)
     if (isBLE && state.transport.onPrinterInfo !== undefined) {
-      state.transport.onPrinterInfo = updatePrinterInfoFromQuery;
+      const connectedTransport = state.transport;
+      connectedTransport.onPrinterInfo = updatePrinterInfoFromQuery;
 
       // Query printer info after a short delay
       setTimeout(async () => {
         try {
-          await state.transport.queryAll();
+          if (state.transport !== connectedTransport || !connectedTransport.isConnected()) return;
+          await connectedTransport.queryAll();
         } catch (e) {
           console.warn('Failed to query printer info:', e.message);
         }
@@ -5398,7 +5404,6 @@ async function handleConnect(event) {
 async function handlePrint() {
   const btn = $('#print-btn');
   const originalText = btn.textContent;
-  const { density, copies, feed, printerModel } = state.printSettings;
 
   try {
     btn.disabled = true;
@@ -5412,6 +5417,8 @@ async function handlePrint() {
       }
     }
 
+    // Use the model resolved by handleConnect, including saved device mappings.
+    const { density, copies, feed, printerModel } = state.printSettings;
     btn.textContent = 'Printing...';
 
     // Substitute template fields if template data is loaded

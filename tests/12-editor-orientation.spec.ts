@@ -10,6 +10,95 @@ async function openApp(page) {
 }
 
 test.describe('Rotated design view', () => {
+  test('M220 preserves physical roll alignment in both editor views', async ({ page }) => {
+    await openApp(page);
+    const results = await page.evaluate(async () => {
+      const { CanvasRenderer } = await import('/canvas.js');
+      const { createShapeElement } = await import('/elements.js');
+      const printers = await import('/printer.js');
+      await printers.loadPrinterDefinitions();
+      const renderer = new CanvasRenderer(document.createElement('canvas'));
+      return ['auto', 'm220'].flatMap(model =>
+        ['none', 'ccw'].flatMap(rotation =>
+        ['threshold', 'floyd-steinberg'].map(dither => {
+          const rotated = rotation === 'ccw';
+          renderer.setDimensions(rotated ? 80 : 50, rotated ? 50 : 80);
+          // A solid full-label rectangle makes both physical edges measurable.
+          const elements = [createShapeElement('rectangle', {
+            x: 0, y: 0, width: renderer.labelWidth, height: renderer.labelHeight,
+            fill: 'black', stroke: 'none',
+          })];
+          const raster = renderer.getRasterData(
+            elements,
+            printers.getPrinterWidthBytes('M220', model),
+            printers.getPrinterDpi('M220', model),
+            dither,
+            printers.getPrinterAlignment('M220', model),
+            rotation
+          );
+          // Both views keep the same 22 mm leading print-head padding.
+          const start = 22;
+          const rowsCorrect = Array.from({ length: raster.heightLines }, (_, y) => {
+            const row = raster.data.slice(y * raster.widthBytes, (y + 1) * raster.widthBytes);
+            return row.every((byte, x) => byte === (x >= start && x < start + 50 ? 255 : 0));
+          }).every(Boolean);
+          return { model, rotation, dither, width: raster.widthBytes, height: raster.heightLines, rowsCorrect };
+        }))
+      );
+    });
+    for (const result of results) {
+      expect(result, `${result.model}, ${result.rotation}, ${result.dither}`).toMatchObject({
+        width: 72, height: 640, rowsCorrect: true,
+      });
+    }
+  });
+
+  test('M220 prints asymmetric edge markers identically from portrait and rotated views', async ({ page }) => {
+    await openApp(page);
+    const results = await page.evaluate(async () => {
+      const { CanvasRenderer } = await import('/canvas.js');
+      const { createShapeElement } = await import('/elements.js');
+      const printers = await import('/printer.js');
+      await printers.loadPrinterDefinitions();
+      const renderer = new CanvasRenderer(document.createElement('canvas'));
+      // Different marks at all four physical edges catch clipping, translation,
+      // and a rotation in the wrong direction (a solid label cannot).
+      const rectangles = [
+        { x: 0, y: 16, width: 8, height: 40 },
+        { x: 384, y: 560, width: 16, height: 64 },
+        { x: 80, y: 0, width: 48, height: 8 },
+        { x: 240, y: 624, width: 72, height: 16 },
+      ];
+      const portrait = rectangles.map(rect => createShapeElement('rectangle', {
+        ...rect, fill: 'black', stroke: 'none',
+      }));
+      const landscape = rectangles.map(rect => createShapeElement('rectangle', {
+        x: 640 - rect.y - rect.height, y: rect.x,
+        width: rect.height, height: rect.width, fill: 'black', stroke: 'none',
+      }));
+      return ['threshold', 'floyd-steinberg'].map(dither => {
+        const width = printers.getPrinterWidthBytes('M220');
+        const dpi = printers.getPrinterDpi('M220');
+        const alignment = printers.getPrinterAlignment('M220');
+        renderer.setDimensions(50, 80);
+        const regular = renderer.getRasterData(portrait, width, dpi, dither, alignment);
+        renderer.setDimensions(80, 50);
+        const rotated = renderer.getRasterData(landscape, width, dpi, dither, alignment, 'ccw');
+        return {
+          dither,
+          hasInk: regular.data.some(byte => byte !== 0),
+          identical: regular.widthBytes === rotated.widthBytes
+            && regular.heightLines === rotated.heightLines
+            && regular.data.length === rotated.data.length
+            && regular.data.every((byte, index) => byte === rotated.data[index]),
+        };
+      });
+    });
+    for (const result of results) {
+      expect(result, result.dither).toMatchObject({ hasInk: true, identical: true });
+    }
+  });
+
   test('keeps physical size while rotating the editor and existing elements', async ({ page }) => {
     await openApp(page);
     await page.evaluate(key => {

@@ -9,6 +9,7 @@
  */
 
 import { BLE } from './constants.js';
+import { withTransportLock } from './utils/transport-lock.js';
 
 // Printer query commands (format: [0x1F, 0x11, X])
 const QUERY_COMMANDS = {
@@ -636,17 +637,17 @@ export class BLETransport {
    * @param {string} queryType - One of: battery, firmware, serial, paper, cover, version, mac, power, label
    */
   async query(queryType) {
-    if (!this.isConnected()) {
-      throw new Error('Not connected');
-    }
-
     const command = QUERY_COMMANDS[queryType];
     if (!command) {
       throw new Error(`Unknown query type: ${queryType}`);
     }
 
-    console.log(`Querying ${queryType}...`);
-    await this.send(new Uint8Array(command));
+    return withTransportLock(this, async () => {
+      // Check after waiting too: the printer may have disconnected meanwhile.
+      if (!this.isConnected()) throw new Error('Not connected');
+      console.log(`Querying ${queryType}...`);
+      await this.send(new Uint8Array(command));
+    });
   }
 
   /**

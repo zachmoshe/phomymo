@@ -7,6 +7,7 @@
  */
 
 import { STORAGE_KEYS } from './constants.js';
+import { withTransportLock } from './utils/transport-lock.js';
 
 // =============================================================================
 // PRINTER DEFINITIONS MANAGER
@@ -474,6 +475,8 @@ export function isNarrowMSeriesPrinter(deviceName, modelOverride = 'auto') {
 export function getPrinterAlignment(deviceName, modelOverride = 'auto') {
   const config = _resolveConfig(deviceName, modelOverride);
   const def = config.definition;
+  // Alignment describes the physical roll position, independent of editor view.
+  // CanvasRenderer restores physical orientation before applying this padding.
   if (def && def.alignment) return def.alignment;
   return 'center';
 }
@@ -613,6 +616,10 @@ function rotateRaster90CCW(data, widthBytes, heightLines) {
  * @param {Function} options.onProgress - Progress callback (percent)
  */
 export async function print(transport, rasterData, options = {}) {
+  return withTransportLock(transport, () => printJob(transport, rasterData, options));
+}
+
+async function printJob(transport, rasterData, options) {
   const { isBLE = false, deviceName = '', printerModel = 'auto', density = 6, feed = 32, continuous = false, onProgress = null } = options;
   const { data, widthBytes, heightLines } = rasterData;
 
@@ -1137,6 +1144,10 @@ async function printTSPL(transport, data, widthBytes, heightLines, labelWidthMm,
  * @param {Function} onProgress - Progress callback
  */
 export async function printDensityTest(transport, isBLE = true, onProgress = null) {
+  return withTransportLock(transport, () => printDensityTestJob(transport, isBLE, onProgress));
+}
+
+async function printDensityTestJob(transport, isBLE, onProgress) {
   console.log('Printing density test pattern (using ESC 7 heat command)...');
 
   // Create a test pattern: 8 strips, each 30 pixels tall, 320 pixels wide
