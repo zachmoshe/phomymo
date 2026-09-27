@@ -663,10 +663,10 @@ export class CanvasRenderer {
             ? groupMembers.map(e => this.getOffsetElement(e))
             : groupMembers;
           const bounds = this.getMultiElementBounds(offsetMembers);
-          if (bounds) {
+          if (bounds && !groupMembers.some(element => element.pinned)) {
             drawGroupHandles(ctx, bounds);
           }
-        } else if (!selected.mirrorSourceId) {
+        } else if (!selected.mirrorSourceId && !selected.pinned) {
           // Single ungrouped element
           drawHandles(ctx, handleElement);
         }
@@ -678,7 +678,7 @@ export class CanvasRenderer {
         ? selectedElements.map(e => this.getOffsetElement(e))
         : selectedElements;
       const bounds = this.getMultiElementBounds(offsetElements);
-      if (bounds) {
+      if (bounds && !selectedElements.some(element => element.pinned)) {
         drawGroupHandles(ctx, bounds);
       }
     }

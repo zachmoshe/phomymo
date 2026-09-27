@@ -24,6 +24,7 @@ export function createTextElement(text = 'Text', options = {}) {
     height: options.height ?? 40,
     rotation: options.rotation ?? 0,
     nonPrintable: options.nonPrintable ?? false,
+    pinned: options.pinned ?? false,
     // Text-specific
     text: text,
     fontSize: options.fontSize ?? 24,
@@ -55,6 +56,7 @@ export function createImageElement(imageData, options = {}) {
     height: options.height ?? 100,
     rotation: options.rotation ?? 0,
     nonPrintable: options.nonPrintable ?? false,
+    pinned: options.pinned ?? false,
     // Image-specific
     imageData: imageData, // Base64 data URL
     naturalWidth: options.naturalWidth ?? 100,
@@ -77,6 +79,7 @@ export function createBarcodeElement(data = '123456789012', options = {}) {
     height: options.height ?? 80,
     rotation: options.rotation ?? 0,
     nonPrintable: options.nonPrintable ?? false,
+    pinned: options.pinned ?? false,
     // Barcode-specific
     barcodeData: data,
     barcodeFormat: options.barcodeFormat ?? 'CODE128',
@@ -97,6 +100,7 @@ export function createQRElement(data = 'https://example.com', options = {}) {
     height: options.height ?? 100,
     rotation: options.rotation ?? 0,
     nonPrintable: options.nonPrintable ?? false,
+    pinned: options.pinned ?? false,
     // QR-specific
     qrData: data,
   };
@@ -118,6 +122,7 @@ export function createShapeElement(shapeType = 'rectangle', options = {}) {
     height: options.height ?? 60,
     rotation: options.rotation ?? 0,
     nonPrintable: options.nonPrintable ?? false,
+    pinned: options.pinned ?? false,
     // Shape-specific
     shapeType: shapeType,                         // 'rectangle', 'ellipse', 'line', 'triangle'
     fill: options.fill ?? 'none',
@@ -148,6 +153,7 @@ const LINKED_COPY_INDEPENDENT_PROPERTIES = new Set([
   'zone',
   'groupId',
   'mirrorSourceId',
+  'pinned',
   'linkedCopyLayout',
   'linkedFlipHorizontal',
   'linkedFlipVertical',
@@ -196,6 +202,7 @@ export function createMirroredElement(elements, sourceId, layout = 'horizontal')
     x: source.x + (linkedCopyLayout === 'horizontal' ? source.width + 20 : 0),
     y: source.y + (linkedCopyLayout === 'vertical' ? source.height + 20 : 0),
     mirrorSourceId: source.id,
+    pinned: false,
     linkedCopyLayout,
     linkedFlipHorizontal: false,
     linkedFlipVertical: false,
@@ -577,7 +584,7 @@ export function getAllGroupIds(elements) {
  */
 export function moveElements(elements, ids, dx, dy) {
   return elements.map(el =>
-    ids.includes(el.id) ? { ...el, x: el.x + dx, y: el.y + dy } : el
+    ids.includes(el.id) && !el.pinned ? { ...el, x: el.x + dx, y: el.y + dy } : el
   );
 }
 
@@ -591,7 +598,7 @@ export function moveElements(elements, ids, dx, dy) {
  */
 export function scaleElements(elements, ids, scaleX, scaleY, center) {
   return elements.map(el => {
-    if (!ids.includes(el.id)) return el;
+    if (!ids.includes(el.id) || el.pinned) return el;
 
     // Get element center
     const elCx = el.x + el.width / 2;
@@ -632,7 +639,7 @@ export function rotateElements(elements, ids, angleDelta, center) {
   const sin = Math.sin(rad);
 
   return elements.map(el => {
-    if (!ids.includes(el.id)) return el;
+    if (!ids.includes(el.id) || el.pinned) return el;
 
     // Get element center
     const elCx = el.x + el.width / 2;

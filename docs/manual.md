@@ -127,6 +127,8 @@ All elements share position (X, Y), size (Width, Height), and rotation controls 
 
 Enable **Non-printable (template guide)** on any element that should help position template content without appearing on the finished label. Non-printable elements are shown at 50% opacity in the editor and omitted from print previews, printing, PDF, and PNG output.
 
+Enable **Pin placement** after positioning an element to prevent accidental dragging, resizing, rotation, or arrow-key nudging. A pinned element remains selectable, and its content and appearance can still be edited. Pinning is saved with the design; turn it off whenever you need to reposition the element.
+
 ![Position properties](screenshots/03-element-properties/09-position-properties.png)
 
 ### Linked Copies for Folded Labels

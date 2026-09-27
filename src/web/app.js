@@ -2327,6 +2327,11 @@ function getSelectedElements() {
   return state.elements.filter(e => state.selectedIds.includes(e.id));
 }
 
+/** Whether a selection contains placement that must not be transformed. */
+function hasPinnedPlacement(elements) {
+  return elements.some(element => element.pinned === true);
+}
+
 /**
  * Get single selected element (for properties panel - only when one selected)
  */
@@ -2412,6 +2417,16 @@ function modifyElement(id, changes) {
   const element = state.elements.find(item => item.id === id);
   if (!element) return;
 
+  // Pinned elements remain editable, but their placement cannot be changed by
+  // the canvas, keyboard nudging, or numeric transform controls.
+  if (element.pinned) {
+    const placementKeys = new Set(['x', 'y', 'width', 'height', 'rotation', 'zone']);
+    changes = Object.fromEntries(
+      Object.entries(changes).filter(([key]) => !placementKeys.has(key))
+    );
+    if (Object.keys(changes).length === 0) return;
+  }
+
   // A linked copy owns only placement, grouping, and its local transform. Its
   // appearance and dimensions always come from the source.
   if (element.mirrorSourceId) {
@@ -2420,6 +2435,7 @@ function modifyElement(id, changes) {
       'y',
       'zone',
       'groupId',
+      'pinned',
       'linkedCopyLayout',
       'linkedFlipHorizontal',
       'linkedFlipVertical',
@@ -2761,14 +2777,17 @@ function updatePropertiesPanel() {
   $('#prop-height').value = formatMeasurement(element.height);
   $('#prop-rotation').value = Math.round(element.rotation || 0);
   $('#prop-non-printable').checked = element.nonPrintable === true;
+  $('#prop-pinned').checked = element.pinned === true;
 
   const isMirrorChild = !!element.mirrorSourceId;
-  $('#prop-x').disabled = false;
-  $('#prop-y').disabled = false;
-  $('#prop-width').disabled = isMirrorChild;
-  $('#prop-height').disabled = isMirrorChild;
-  $('#prop-rotation').disabled = isMirrorChild;
+  const isPinned = element.pinned === true;
+  $('#prop-x').disabled = isPinned;
+  $('#prop-y').disabled = isPinned;
+  $('#prop-width').disabled = isMirrorChild || isPinned;
+  $('#prop-height').disabled = isMirrorChild || isPinned;
+  $('#prop-rotation').disabled = isMirrorChild || isPinned;
   $('#prop-non-printable').disabled = isMirrorChild;
+  $('#prop-pinned').disabled = false;
 
   // Update layer number (1-indexed for display, position in array determines z-order)
   const layerIndex = state.elements.findIndex(el => el.id === element.id);
@@ -3520,7 +3539,8 @@ function handleCanvasMouseDown(e) {
   const isMultiSelect = state.selectedIds.length > 1;
 
   // For multi-selection or groups, check group bounding box handles first
-  if (isMultiSelect || (selectedElements.length === 1 && selectedElements[0].groupId)) {
+  if ((isMultiSelect || (selectedElements.length === 1 && selectedElements[0].groupId)) &&
+      !hasPinnedPlacement(selectedElements)) {
     const rawBounds = getMultiElementBounds(selectedElements);
     // Adjust bounds for canvas position in multi-label mode
     const bounds = selectedElements.length > 0
@@ -3553,7 +3573,7 @@ function handleCanvasMouseDown(e) {
   // Single element: check individual handles
   if (state.selectedIds.length === 1) {
     const selected = selectedElements[0];
-    if (selected && !selected.mirrorSourceId) {
+    if (selected && !selected.mirrorSourceId && !selected.pinned) {
       // Get element with canvas-adjusted position for handle detection
       const adjustedElement = getElementWithCanvasPos(selected);
       const handle = getHandleAtPoint(pos.x, pos.y, adjustedElement);
@@ -3590,6 +3610,7 @@ function handleCanvasMouseDown(e) {
 
     // Start move drag for all selected elements
     const currentSelected = getSelectedElements();
+    if (hasPinnedPlacement(currentSelected)) return;
     saveHistory();
     state.isDragging = true;
     state.dragType = currentSelected.length > 1 ? 'group-move' : 'move';
@@ -3776,7 +3797,8 @@ function handleCanvasMouseMove(e) {
   const isMultiSelect = state.selectedIds.length > 1;
 
   // Check group handles for multi-selection
-  if (isMultiSelect || (selectedElements.length === 1 && selectedElements[0].groupId)) {
+  if ((isMultiSelect || (selectedElements.length === 1 && selectedElements[0].groupId)) &&
+      !hasPinnedPlacement(selectedElements)) {
     const rawBounds = getMultiElementBounds(selectedElements);
     const bounds = selectedElements.length > 0
       ? getBoundsWithCanvasPos(rawBounds, selectedElements[0].zone || 0)
@@ -3793,7 +3815,7 @@ function handleCanvasMouseMove(e) {
   // Check single element handles
   if (state.selectedIds.length === 1) {
     const selected = selectedElements[0];
-    if (selected && !selected.mirrorSourceId) {
+    if (selected && !selected.mirrorSourceId && !selected.pinned) {
       const adjustedElement = getElementWithCanvasPos(selected);
       const handle = getHandleAtPoint(pos.x, pos.y, adjustedElement);
       if (handle) {
@@ -3804,7 +3826,7 @@ function handleCanvasMouseMove(e) {
   }
 
   const hovered = getElementAtCanvasPoint(pos.x, pos.y);
-  canvas.style.cursor = hovered ? 'move' : 'crosshair';
+  canvas.style.cursor = hovered ? (hovered.pinned ? 'pointer' : 'move') : 'crosshair';
 }
 
 /**
@@ -4106,7 +4128,8 @@ function handleCanvasPointerDown(e) {
   const isMultiSelect = state.selectedIds.length > 1;
 
   // For multi-selection or groups, check group bounding box handles first
-  if (isMultiSelect || (selectedElements.length === 1 && selectedElements[0].groupId)) {
+  if ((isMultiSelect || (selectedElements.length === 1 && selectedElements[0].groupId)) &&
+      !hasPinnedPlacement(selectedElements)) {
     const rawBounds = getMultiElementBounds(selectedElements);
     const bounds = selectedElements.length > 0
       ? getBoundsWithCanvasPos(rawBounds, selectedElements[0].zone || 0)
@@ -4138,7 +4161,7 @@ function handleCanvasPointerDown(e) {
   // Single element: check individual handles
   if (state.selectedIds.length === 1) {
     const selected = selectedElements[0];
-    if (selected && !selected.mirrorSourceId) {
+    if (selected && !selected.mirrorSourceId && !selected.pinned) {
       const adjustedElement = getElementWithCanvasPos(selected);
       const handle = getHandleAtPoint(pos.x, pos.y, adjustedElement, e.pointerType === 'touch');
       if (handle) {
@@ -4174,6 +4197,12 @@ function handleCanvasPointerDown(e) {
 
     // Start move drag for all selected elements
     const currentSelected = getSelectedElements();
+    if (hasPinnedPlacement(currentSelected)) {
+      // Preserve touch long-press editing/properties while suppressing drag.
+      state.dragStartX = pos.x;
+      state.dragStartY = pos.y;
+      return;
+    }
     saveHistory();
     state.isDragging = true;
     state.dragType = currentSelected.length > 1 ? 'group-move' : 'move';
@@ -4382,7 +4411,8 @@ function handleCanvasPointerMove(e) {
     const selectedElements = getSelectedElements();
     const isMultiSelect = state.selectedIds.length > 1;
 
-    if (isMultiSelect || (selectedElements.length === 1 && selectedElements[0].groupId)) {
+    if ((isMultiSelect || (selectedElements.length === 1 && selectedElements[0].groupId)) &&
+        !hasPinnedPlacement(selectedElements)) {
       const rawBounds = getMultiElementBounds(selectedElements);
       const bounds = selectedElements.length > 0
         ? getBoundsWithCanvasPos(rawBounds, selectedElements[0].zone || 0)
@@ -4398,7 +4428,7 @@ function handleCanvasPointerMove(e) {
 
     if (state.selectedIds.length === 1) {
       const selected = selectedElements[0];
-      if (selected && !selected.mirrorSourceId) {
+      if (selected && !selected.mirrorSourceId && !selected.pinned) {
         const adjustedElement = getElementWithCanvasPos(selected);
         const handle = getHandleAtPoint(pos.x, pos.y, adjustedElement, false);
         if (handle) {
@@ -4409,7 +4439,7 @@ function handleCanvasPointerMove(e) {
     }
 
     const hovered = getElementAtCanvasPoint(pos.x, pos.y);
-    canvas.style.cursor = hovered ? 'move' : 'crosshair';
+    canvas.style.cursor = hovered ? (hovered.pinned ? 'pointer' : 'move') : 'crosshair';
   }
 }
 
@@ -4566,7 +4596,8 @@ function handleCanvasTouchStart(e) {
   const isMultiSelect = state.selectedIds.length > 1;
 
   // Check group handles
-  if (isMultiSelect || (selectedElements.length === 1 && selectedElements[0].groupId)) {
+  if ((isMultiSelect || (selectedElements.length === 1 && selectedElements[0].groupId)) &&
+      !hasPinnedPlacement(selectedElements)) {
     const rawBounds = getMultiElementBounds(selectedElements);
     const bounds = selectedElements.length > 0
       ? getBoundsWithCanvasPos(rawBounds, selectedElements[0].zone || 0)
@@ -4598,7 +4629,7 @@ function handleCanvasTouchStart(e) {
   // Single element handles
   if (state.selectedIds.length === 1) {
     const selected = selectedElements[0];
-    if (selected && !selected.mirrorSourceId) {
+    if (selected && !selected.mirrorSourceId && !selected.pinned) {
       const adjustedElement = getElementWithCanvasPos(selected);
       const handle = getHandleAtPoint(pos.x, pos.y, adjustedElement, true);
       if (handle) {
@@ -4628,6 +4659,12 @@ function handleCanvasTouchStart(e) {
     }
 
     const currentSelected = getSelectedElements();
+    if (hasPinnedPlacement(currentSelected)) {
+      // Preserve touch long-press editing/properties while suppressing drag.
+      state.dragStartX = pos.x;
+      state.dragStartY = pos.y;
+      return;
+    }
     saveHistory();
     state.isDragging = true;
     state.dragType = currentSelected.length > 1 ? 'group-move' : 'move';
@@ -5773,6 +5810,7 @@ function updateElementsList() {
         ${icon}
         <span class="flex-1 truncate">${escapeHtml(label)}</span>
         ${el.mirrorSourceId ? `<span class="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-purple-700" title="Linked copy">${getLinkedTransformBadge(el)}</span>` : ''}
+        ${el.pinned ? '<span class="rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-700" title="Placement pinned">Pinned</span>' : ''}
         ${el.nonPrintable ? '<span class="text-[10px] font-medium text-amber-600" title="Non-printable template guide">Guide</span>' : ''}
         ${el.groupId ? '<span class="text-xs text-gray-400">G</span>' : ''}
       </button>
@@ -5983,6 +6021,12 @@ function handleKeyDown(e) {
   if (hasSelection && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
     if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
       e.preventDefault();
+      if (hasPinnedPlacement(selectedElements)) {
+        setStatus(selectedElements.length > 1
+          ? 'Unpin the selection before moving it'
+          : 'Unpin this element before moving it');
+        return;
+      }
       const step = e.shiftKey ? 10 : 1;
       let dx = 0, dy = 0;
       switch (e.key) {
@@ -7076,6 +7120,10 @@ function populateMobileProps() {
         <input type="checkbox" id="mobile-prop-nonPrintable" class="w-5 h-5 rounded border-amber-300 text-amber-600" ${selected.nonPrintable ? 'checked' : ''}>
         <span><span class="text-sm font-medium">Non-printable</span><span class="block text-xs text-amber-700">Visible as a 50% template guide</span></span>
       </label>
+      <label class="flex items-center gap-2 mb-4 rounded bg-blue-50 px-3 py-2 text-blue-950">
+        <input type="checkbox" id="mobile-prop-pinned" class="w-5 h-5 rounded border-blue-300 text-blue-600" ${selected.pinned ? 'checked' : ''}>
+        <span><span class="text-sm font-medium">Pin placement</span><span class="block text-xs text-blue-700">Prevent moving, resizing, or rotating</span></span>
+      </label>
       <div class="flex items-center justify-between mb-3">
         <div class="prop-label text-gray-400 mb-0">Position & Size</div>
         <label class="flex items-center gap-2 text-xs text-gray-500">
@@ -7090,11 +7138,11 @@ function populateMobileProps() {
         <div class="prop-row">
           <div class="flex-1">
             <label class="text-xs text-gray-500">X (<span class="mobile-prop-unit">${state.measurementUnit}</span>)</label>
-            <input type="number" id="mobile-prop-x" class="prop-input" value="${formatMeasurement(selected.x)}">
+            <input type="number" id="mobile-prop-x" class="prop-input" value="${formatMeasurement(selected.x)}" ${selected.pinned ? 'disabled' : ''}>
           </div>
           <div class="flex-1">
             <label class="text-xs text-gray-500">Y (<span class="mobile-prop-unit">${state.measurementUnit}</span>)</label>
-            <input type="number" id="mobile-prop-y" class="prop-input" value="${formatMeasurement(selected.y)}">
+            <input type="number" id="mobile-prop-y" class="prop-input" value="${formatMeasurement(selected.y)}" ${selected.pinned ? 'disabled' : ''}>
           </div>
         </div>
       </div>
@@ -7102,11 +7150,11 @@ function populateMobileProps() {
         <div class="prop-row">
           <div class="flex-1">
             <label class="text-xs text-gray-500">Width (<span class="mobile-prop-unit">${state.measurementUnit}</span>)</label>
-            <input type="number" id="mobile-prop-width" class="prop-input" value="${formatMeasurement(selected.width)}" ${isMirrorChild ? 'disabled' : ''}>
+            <input type="number" id="mobile-prop-width" class="prop-input" value="${formatMeasurement(selected.width)}" ${isMirrorChild || selected.pinned ? 'disabled' : ''}>
           </div>
           <div class="flex-1">
             <label class="text-xs text-gray-500">Height (<span class="mobile-prop-unit">${state.measurementUnit}</span>)</label>
-            <input type="number" id="mobile-prop-height" class="prop-input" value="${formatMeasurement(selected.height)}" ${isMirrorChild ? 'disabled' : ''}>
+            <input type="number" id="mobile-prop-height" class="prop-input" value="${formatMeasurement(selected.height)}" ${isMirrorChild || selected.pinned ? 'disabled' : ''}>
           </div>
         </div>
       </div>
@@ -7114,7 +7162,7 @@ function populateMobileProps() {
         <div class="prop-row">
           <div class="flex-1">
             <label class="text-xs text-gray-500">Rotation</label>
-            <input type="number" id="mobile-prop-rotation" class="prop-input" value="${selected.rotation || 0}" min="0" max="360" ${isMirrorChild ? 'disabled' : ''}>
+            <input type="number" id="mobile-prop-rotation" class="prop-input" value="${selected.rotation || 0}" min="0" max="360" ${isMirrorChild || selected.pinned ? 'disabled' : ''}>
           </div>
           <div class="flex-1"></div>
         </div>
@@ -7137,6 +7185,7 @@ function populateMobileProps() {
 function wireUpMobilePropHandlers(element) {
   // Full update - saves history and syncs desktop panel (use for discrete changes)
   const updateProp = (prop, value) => {
+    if (element.pinned && ['x', 'y', 'width', 'height', 'rotation', 'zone'].includes(prop)) return;
     saveHistory();
     element[prop] = value;
     state.renderer.clearCache(element.id);
@@ -7190,6 +7239,10 @@ function wireUpMobilePropHandlers(element) {
   $('#mobile-prop-height')?.addEventListener('change', (e) => updateProp('height', Math.max(ELEMENT.MIN_HEIGHT, measurementToPixels(e.target.value))));
   $('#mobile-prop-rotation')?.addEventListener('change', (e) => updateProp('rotation', parseFloat(e.target.value)));
   $('#mobile-prop-nonPrintable')?.addEventListener('change', (e) => updateProp('nonPrintable', e.target.checked));
+  $('#mobile-prop-pinned')?.addEventListener('change', (e) => {
+    updateProp('pinned', e.target.checked);
+    populateMobileProps();
+  });
   $('#mobile-measurement-unit')?.addEventListener('change', (e) => setMeasurementUnit(e.target.value));
 
   // Text properties - use live update for typing, save history on blur
@@ -8317,6 +8370,13 @@ function init() {
   $('#prop-non-printable').addEventListener('change', (e) => {
     const id = state.selectedIds[0];
     if (id) modifyElement(id, { nonPrintable: e.target.checked });
+  });
+  $('#prop-pinned').addEventListener('change', (e) => {
+    const id = state.selectedIds[0];
+    if (id) {
+      saveHistory();
+      modifyElement(id, { pinned: e.target.checked });
+    }
   });
 
   $('#prop-create-mirror').addEventListener('click', () => createMirrorForSelected());
