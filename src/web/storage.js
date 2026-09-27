@@ -151,7 +151,7 @@ export function exportDesign(name) {
 
   return JSON.stringify({
     name,
-    version: 6, // Version 6 supports linked copies with independent transforms
+    version: 8, // Version 8 supports label-style text badges
     ...design,
   }, null, 2);
 }

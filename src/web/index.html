@@ -900,6 +900,14 @@
             <textarea id="prop-text-content" class="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 h-16 resize-none" placeholder="Enter text..."></textarea>
           </div>
 
+          <div>
+            <label class="text-[10px] text-gray-400 uppercase tracking-wide">Display</label>
+            <select id="prop-text-mode" class="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400" title="Labels renders every whitespace-separated word inside a rounded badge">
+              <option value="text">Plain text</option>
+              <option value="labels">Labels (word badges)</option>
+            </select>
+          </div>
+
           <!-- Font & Size on same row -->
           <div class="grid grid-cols-3 gap-1.5">
             <div class="col-span-2">
@@ -2286,7 +2294,7 @@
     pdfjsModule.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
     window.pdfjsLib = pdfjsModule;
   </script>
-  <script type="module" src="app.js?v=162"></script>
+  <script type="module" src="app.js?v=164"></script>
   <script>
     // Show body once styles are ready
     requestAnimationFrame(() => {

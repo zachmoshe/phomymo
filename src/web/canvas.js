@@ -993,7 +993,7 @@ export class CanvasRenderer {
    * Render text element (centered at origin)
    */
   renderTextElement(element, width, height) {
-    const { text, fontSize, color, align, verticalAlign, fontFamily, fontWeight, fontStyle, textDecoration, background, noWrap, clipOverflow, autoScale } = element;
+    const { text, textMode, fontSize, color, align, verticalAlign, fontFamily, fontWeight, fontStyle, textDecoration, background, noWrap, clipOverflow, autoScale } = element;
 
     // Draw background if not transparent
     if (background && background !== 'transparent') {
@@ -1018,7 +1018,9 @@ export class CanvasRenderer {
     // Calculate effective font size (auto-scale if enabled)
     let effectiveFontSize = fontSize;
     if (autoScale) {
-      effectiveFontSize = this.calculateAutoScaleFontSize(text, width, height, fontFamily, fontWeight, fontStyle, noWrap);
+      effectiveFontSize = textMode === 'labels'
+        ? this.calculateLabelAutoScaleFontSize(text, width, height, fontFamily, fontWeight, fontStyle, noWrap)
+        : this.calculateAutoScaleFontSize(text, width, height, fontFamily, fontWeight, fontStyle, noWrap);
     }
 
     // Build font string with weight and style
@@ -1027,6 +1029,25 @@ export class CanvasRenderer {
     const fontStr = `${style} ${weight} ${effectiveFontSize}px ${fontFamily || 'Inter, sans-serif'}`.trim();
     this.ctx.font = fontStr;
     this.ctx.textBaseline = 'middle';
+
+    if (textMode === 'labels') {
+      this.renderLabelBadges({
+        text,
+        width,
+        height,
+        fontSize: effectiveFontSize,
+        fontFamily,
+        fontWeight,
+        fontStyle,
+        textDecoration,
+        textColor,
+        align,
+        verticalAlign,
+        noWrap,
+      });
+      if (clipOverflow) this.ctx.restore();
+      return;
+    }
 
     // Set text alignment
     let textX = 0;
@@ -1122,6 +1143,168 @@ export class CanvasRenderer {
     if (clipOverflow) {
       this.ctx.restore();
     }
+  }
+
+  /**
+   * Measure whitespace-separated words into badge rows.
+   * Explicit newlines always begin a new row; noWrap disables width wrapping.
+   */
+  layoutLabelBadges(text, maxWidth, fontSize, fontFamily = 'Inter, sans-serif', fontWeight = 'normal', fontStyle = 'normal', noWrap = false) {
+    const weight = fontWeight === 'bold' ? 'bold' : '';
+    const style = fontStyle === 'italic' ? 'italic' : '';
+    this.ctx.font = `${style} ${weight} ${fontSize}px ${fontFamily}`.trim();
+
+    const paddingX = Math.max(3, fontSize * 0.35);
+    const paddingY = Math.max(2, fontSize * 0.16);
+    const gapX = Math.max(3, fontSize * 0.28);
+    const gapY = Math.max(3, fontSize * 0.24);
+    const badgeHeight = fontSize * 1.2 + paddingY * 2;
+    const rows = [];
+
+    for (const paragraph of text.split('\n')) {
+      // Keep unresolved template fields and expressions intact in the editor;
+      // their substituted values are split normally when previews print.
+      const words = paragraph.trim()
+        ? (paragraph.match(/\{\{[^}]*\}\}|\[\[[^\]]*\]\]|[^\s]+/g) || [])
+        : [];
+      if (words.length === 0) {
+        rows.push({ badges: [], width: 0 });
+        continue;
+      }
+
+      let badges = [];
+      let rowWidth = 0;
+      for (const word of words) {
+        const textWidth = this.ctx.measureText(word).width;
+        const badge = { text: word, textWidth, width: textWidth + paddingX * 2 };
+        const nextWidth = badges.length ? rowWidth + gapX + badge.width : badge.width;
+
+        if (!noWrap && badges.length > 0 && nextWidth > maxWidth) {
+          rows.push({ badges, width: rowWidth });
+          badges = [badge];
+          rowWidth = badge.width;
+        } else {
+          badges.push(badge);
+          rowWidth = nextWidth;
+        }
+      }
+      rows.push({ badges, width: rowWidth });
+    }
+
+    const totalHeight = rows.length * badgeHeight + Math.max(0, rows.length - 1) * gapY;
+    return { rows, paddingX, paddingY, gapX, gapY, badgeHeight, totalHeight };
+  }
+
+  /** Render every word as an outlined, rounded badge with flex-like wrapping. */
+  renderLabelBadges(options) {
+    const {
+      text,
+      width,
+      height,
+      fontSize,
+      fontFamily,
+      fontWeight,
+      fontStyle,
+      textDecoration,
+      textColor,
+      align,
+      verticalAlign,
+      noWrap,
+    } = options;
+    const availableWidth = Math.max(1, width - 8);
+    const layout = this.layoutLabelBadges(
+      text,
+      availableWidth,
+      fontSize,
+      fontFamily,
+      fontWeight,
+      fontStyle,
+      noWrap
+    );
+
+    let rowY;
+    const vAlign = verticalAlign || 'middle';
+    if (vAlign === 'top') {
+      rowY = -height / 2 + 4;
+    } else if (vAlign === 'bottom') {
+      rowY = height / 2 - layout.totalHeight - 4;
+    } else {
+      rowY = -layout.totalHeight / 2;
+    }
+
+    const lineWidth = Math.max(1, fontSize / 16);
+    const radius = Math.min(layout.badgeHeight / 2, Math.max(3, fontSize * 0.3));
+    this.ctx.textAlign = 'left';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.lineWidth = lineWidth;
+    this.ctx.strokeStyle = textColor;
+    this.ctx.fillStyle = textColor;
+    this.ctx.setLineDash([]);
+
+    for (const row of layout.rows) {
+      let badgeX;
+      if (align === 'right') {
+        badgeX = width / 2 - 4 - row.width;
+      } else if (align === 'center') {
+        badgeX = -row.width / 2;
+      } else {
+        badgeX = -width / 2 + 4;
+      }
+
+      for (const badge of row.badges) {
+        this.ctx.beginPath();
+        this.ctx.roundRect(badgeX, rowY, badge.width, layout.badgeHeight, radius);
+        this.ctx.stroke();
+
+        const textX = badgeX + layout.paddingX;
+        const textY = rowY + layout.badgeHeight / 2;
+        this.ctx.fillText(badge.text, textX, textY);
+
+        if (textDecoration === 'underline') {
+          const underlineY = textY + fontSize * 0.45;
+          this.ctx.beginPath();
+          this.ctx.moveTo(textX, underlineY);
+          this.ctx.lineTo(textX + badge.textWidth, underlineY);
+          this.ctx.stroke();
+        }
+
+        badgeX += badge.width + layout.gapX;
+      }
+      rowY += layout.badgeHeight + layout.gapY;
+    }
+  }
+
+  /** Calculate the largest badge font size that fits the element bounds. */
+  calculateLabelAutoScaleFontSize(text, width, height, fontFamily, fontWeight, fontStyle, noWrap) {
+    const availableWidth = Math.max(1, width - 8);
+    const availableHeight = Math.max(1, height - 8);
+    let minSize = 6;
+    let maxSize = 200;
+    let bestSize = minSize;
+
+    while (minSize <= maxSize) {
+      const testSize = Math.floor((minSize + maxSize) / 2);
+      const layout = this.layoutLabelBadges(
+        text,
+        availableWidth,
+        testSize,
+        fontFamily,
+        fontWeight,
+        fontStyle,
+        noWrap
+      );
+      const widestRow = Math.max(0, ...layout.rows.map(row => row.width));
+      const fits = widestRow <= availableWidth && layout.totalHeight <= availableHeight;
+
+      if (fits) {
+        bestSize = testSize;
+        minSize = testSize + 1;
+      } else {
+        maxSize = testSize - 1;
+      }
+    }
+
+    return Math.max(bestSize, 6);
   }
 
   /**

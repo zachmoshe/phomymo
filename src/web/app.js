@@ -1,10 +1,10 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v162
+ * v164
  */
 
-import { CanvasRenderer } from './canvas.js?v=119';
+import { CanvasRenderer } from './canvas.js?v=121';
 import { BLETransport } from './ble.js?v=103';
 import { USBTransport } from './usb.js?v=101';
 import { print, printDensityTest, isDSeriesPrinter, isP12Printer, isA30Printer, isTapePrinter, isPM241Printer, isTSPLPrinter, isRotatedPrinter, getPrinterWidthBytes, getPrinterDpi, getPrinterAlignment, getPrinterDescription, isDeviceRecognized, getMatchedPattern, loadPrinterDefinitions, getAllPrinterDefinitions, getPrinterDefinition, getCustomPrinterDefinitions, saveCustomPrinterDefinition, deleteCustomPrinterDefinition, isBuiltinPrinter, resetBuiltinPrinter, getAvailableProtocols, getAvailableLabelPresets, getDetectedDefinition } from './printer.js?v=128';
@@ -40,7 +40,7 @@ import {
   collapseToSingleZone,
   hasElementsInHigherZones,
   removeElementsInHigherZones,
-} from './elements.js?v=105';
+} from './elements.js?v=107';
 import {
   HandleType,
   getHandleAtPoint,
@@ -58,7 +58,7 @@ import {
   loadDesign,
   listDesigns,
   deleteDesign,
-} from './storage.js?v=103';
+} from './storage.js?v=105';
 import {
   extractFields,
   hasTemplateFields,
@@ -2450,7 +2450,7 @@ function modifyElement(id, changes) {
   synchronizeMirrors();
 
   // Only clear cache if content or size changed (not just position/rotation)
-  const contentKeys = ['width', 'height', 'text', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textDecoration', 'background', 'noWrap', 'clipOverflow', 'autoScale', 'verticalAlign', 'imageData', 'barcodeData', 'barcodeFormat', 'qrData', 'brightness', 'contrast', 'dither', 'showText', 'textFontSize', 'textBold', 'shapeType', 'fill', 'stroke', 'strokeWidth', 'strokeDash', 'cornerRadius', 'nonPrintable'];
+  const contentKeys = ['width', 'height', 'text', 'textMode', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textDecoration', 'background', 'noWrap', 'clipOverflow', 'autoScale', 'verticalAlign', 'imageData', 'barcodeData', 'barcodeFormat', 'qrData', 'brightness', 'contrast', 'dither', 'showText', 'textFontSize', 'textBold', 'shapeType', 'fill', 'stroke', 'strokeWidth', 'strokeDash', 'cornerRadius', 'nonPrintable'];
   const needsCacheClear = Object.keys(changes).some(key => contentKeys.includes(key));
   if (needsCacheClear) {
     state.renderer.clearCache(id);
@@ -2828,6 +2828,7 @@ function updatePropertiesPanel() {
     case 'text':
       $('#props-text').classList.remove('hidden');
       $('#prop-text-content').value = element.text || '';
+      $('#prop-text-mode').value = element.textMode === 'labels' ? 'labels' : 'text';
       $('#prop-font-family').value = element.fontFamily || 'Inter, sans-serif';
       $('#prop-font-size').value = element.fontSize || 24;
       $('#prop-no-wrap').checked = element.noWrap || false;
@@ -6790,6 +6791,13 @@ function populateMobileProps() {
         <textarea id="mobile-prop-text" class="prop-input" rows="2">${escapeHtml(selected.text || '')}</textarea>
       </div>
       <div class="prop-group">
+        <div class="prop-label">Display</div>
+        <select id="mobile-prop-textMode" class="prop-input">
+          <option value="text" ${selected.textMode !== 'labels' ? 'selected' : ''}>Plain text</option>
+          <option value="labels" ${selected.textMode === 'labels' ? 'selected' : ''}>Labels (word badges)</option>
+        </select>
+      </div>
+      <div class="prop-group">
         <div class="prop-row">
           <div class="flex-1">
             <div class="prop-label">Font</div>
@@ -7256,6 +7264,7 @@ function wireUpMobilePropHandlers(element) {
   }
   $('#mobile-prop-fontSize')?.addEventListener('change', (e) => updateProp('fontSize', parseInt(e.target.value)));
   $('#mobile-prop-fontFamily')?.addEventListener('change', (e) => updateProp('fontFamily', e.target.value));
+  $('#mobile-prop-textMode')?.addEventListener('change', (e) => updateProp('textMode', e.target.value));
 
   // Mobile add system fonts button
   $('#mobile-add-system-fonts-btn')?.addEventListener('click', async () => {
@@ -8444,6 +8453,8 @@ function init() {
   const bindCtx = createBindingContext(state, getSelected, modifyElement);
 
   // === TEXT ELEMENT BINDINGS ===
+  bindSelect('#prop-text-mode', 'textMode', 'text', bindCtx);
+
   // Checkboxes
   bindCheckbox('#prop-no-wrap', 'noWrap', 'text', bindCtx);
   bindCheckbox('#prop-clip-overflow', 'clipOverflow', 'text', bindCtx);
