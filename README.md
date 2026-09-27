@@ -2,7 +2,8 @@
 
 A free, browser-based label designer for Phomemo thermal printers. No drivers needed - connects via Bluetooth or USB.
 
-**Try it now: https://phomymo.affordablemagic.net**
+**Try it now: https://zachmoshe.github.io/phomymo/**
+(or the original version at: https://phomymo.affordablemagic.net)
 
 <p>
   <img src="screenshot.png" alt="Phomymo Label Designer" width="600" />
