@@ -24,6 +24,7 @@ Open [phomymo.affordablemagic.net](https://phomymo.affordablemagic.net) in Chrom
 The interface has three main areas:
 
 - **Toolbar** (top) - Buttons to add elements, undo/redo, arrange layers, save/load, and export
+- **Rotate design view** (beside Label Size) - Keeps the physical label dimensions unchanged but swaps the editor surface orientation. For example, define an M220 label as `50 × 80 mm`, then rotate the design view to work on an `80 × 50 mm` horizontal surface. Existing elements rotate with the view. Print, PNG, and PDF output are rotated back to the physical `50 × 80 mm` orientation automatically. The view orientation is saved with the design.
 - **Canvas** (center) - Your label design area with zoom controls
 - **Properties Panel** (right) - Edit the selected element's properties
 

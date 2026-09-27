@@ -33,7 +33,7 @@ python3 -m http.server 8080
 
 **Measurement Units** - Enter exact element positions and sizes in millimetres (the default) or switch the properties panel to pixels. The unit preference is saved in the browser.
 
-**Label Sizes** - Preset sizes for each printer type, round labels, custom dimensions. Auto-switches based on connected printer. Multi-label rolls with clone or individual zone modes.
+**Label Sizes** - Preset sizes for each printer type, round labels, custom dimensions. Auto-switches based on connected printer. For labels that feed through the printer vertically, keep the real physical dimensions and use **Rotate design view** to work horizontally; printing and PNG/PDF export rotate the result back automatically. Multi-label rolls support clone or individual zone modes.
 
 **Templates & Batch Printing** - Variable fields with `{{FieldName}}` syntax, CSV import, preview grid, and batch printing with progress tracking.
 

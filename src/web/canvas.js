@@ -2629,9 +2629,12 @@ export class CanvasRenderer {
    * @param {number} printerDpi - Printer DPI (203 for most, 300 for M02 Pro)
    * @param {string} ditherMode - Dither mode: 'auto', 'none', 'threshold', 'floyd-steinberg', 'atkinson', 'ordered'
    * @param {'left' | 'center' | 'right'} alignment - How to align label within printer width (default: 'center')
+   * @param {'none' | 'ccw'} outputRotation - Optional inverse editor-view rotation
    */
-  getRasterData(elements, printerWidthBytes = DEFAULT_PRINTER_WIDTH_BYTES, printerDpi = 203, ditherMode = 'auto', alignment = 'center') {
+  getRasterData(elements, printerWidthBytes = DEFAULT_PRINTER_WIDTH_BYTES, printerDpi = 203, ditherMode = 'auto', alignment = 'center', outputRotation = 'none') {
     let { pixels, width, height } = this._renderToPixels(elements);
+
+    ({ pixels, width, height } = this._applyOutputRotation(pixels, width, height, outputRotation));
 
     // Scale up for higher DPI printers (e.g., M02 Pro at 300 DPI)
     if (printerDpi > 203) {
@@ -2693,9 +2696,11 @@ export class CanvasRenderer {
    * print failures. Use dithered grays instead of solid black for large fills.
    * @param {Array} elements - Elements to render
    * @param {string} ditherMode - Dither mode: 'auto', 'none', 'threshold', 'floyd-steinberg', 'atkinson', 'ordered'
+   * @param {'none' | 'ccw'} outputRotation - Optional inverse editor-view rotation
    */
-  getRasterDataRaw(elements, ditherMode = 'auto') {
-    const { pixels, width, height } = this._renderToPixels(elements);
+  getRasterDataRaw(elements, ditherMode = 'auto', outputRotation = 'none') {
+    let { pixels, width, height } = this._renderToPixels(elements);
+    ({ pixels, width, height } = this._applyOutputRotation(pixels, width, height, outputRotation));
     const widthBytes = Math.ceil(width / 8);
     const data = this._pixelsToRaster(pixels, width, height, widthBytes, false, ditherMode);
 
@@ -2704,6 +2709,37 @@ export class CanvasRenderer {
       widthBytes,
       heightLines: height,
     };
+  }
+
+  /**
+   * Rotate a rendered RGBA buffer into the physical printer orientation.
+   * The editor can show a label rotated clockwise while its saved physical
+   * dimensions remain unchanged; printing applies the inverse rotation here.
+   */
+  _applyOutputRotation(pixels, width, height, outputRotation) {
+    if (outputRotation !== 'ccw') {
+      return { pixels, width, height };
+    }
+
+    const rotatedWidth = height;
+    const rotatedHeight = width;
+    const rotated = new Uint8ClampedArray(pixels.length);
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const sourceIndex = (y * width + x) * 4;
+        const destinationX = y;
+        const destinationY = width - 1 - x;
+        const destinationIndex = (destinationY * rotatedWidth + destinationX) * 4;
+
+        rotated[destinationIndex] = pixels[sourceIndex];
+        rotated[destinationIndex + 1] = pixels[sourceIndex + 1];
+        rotated[destinationIndex + 2] = pixels[sourceIndex + 2];
+        rotated[destinationIndex + 3] = pixels[sourceIndex + 3];
+      }
+    }
+
+    return { pixels: rotated, width: rotatedWidth, height: rotatedHeight };
   }
 
   /**

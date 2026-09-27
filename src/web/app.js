@@ -1,10 +1,10 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v164
+ * v168
  */
 
-import { CanvasRenderer } from './canvas.js?v=121';
+import { CanvasRenderer } from './canvas.js?v=124';
 import { BLETransport } from './ble.js?v=103';
 import { USBTransport } from './usb.js?v=101';
 import { print, printDensityTest, isDSeriesPrinter, isP12Printer, isA30Printer, isTapePrinter, isPM241Printer, isTSPLPrinter, isRotatedPrinter, getPrinterWidthBytes, getPrinterDpi, getPrinterAlignment, getPrinterDescription, isDeviceRecognized, getMatchedPattern, loadPrinterDefinitions, getAllPrinterDefinitions, getPrinterDefinition, getCustomPrinterDefinitions, saveCustomPrinterDefinition, deleteCustomPrinterDefinition, isBuiltinPrinter, resetBuiltinPrinter, getAvailableProtocols, getAvailableLabelPresets, getDetectedDefinition } from './printer.js?v=128';
@@ -147,6 +147,7 @@ let LABEL_SIZES = { ...M_SERIES_LABEL_SIZES, ...M_SERIES_ROUND_LABELS };
 const state = {
   connectionType: 'ble',
   labelSize: { width: 40, height: 30 },
+  editorRotation: 0, // 0 or 90 degrees clockwise; physical label size never changes
   measurementUnit: safeStorageGet(STORAGE_KEYS.MEASUREMENT_UNIT) === 'px' ? 'px' : 'mm',
   tapeWidth: 12,  // Tape width in mm for tape printers (P12/A30), default 12mm
   elements: [],
@@ -939,7 +940,8 @@ function updateLabelSizeDropdown(deviceName = '', model = 'auto') {
     // Pick default based on printer type
     select.value = defaultKey;
     state.labelSize = { ...LABEL_SIZES[defaultKey] };
-    state.renderer.setDimensions(state.labelSize.width, state.labelSize.height, state.zoom, state.labelSize.round || false);
+    if (state.labelSize.round) resetEditorRotation();
+    applyEditorDimensions();
     state.renderer.clearCache();
     updatePrintSize();
     // Auto zoom-to-fit if label is too large at 100% zoom
@@ -1170,7 +1172,7 @@ function adjustLabelLength(delta) {
     $('#custom-height').value = tapeHeight;
 
     // Update canvas
-    state.renderer.setDimensions(newWidth, tapeHeight, state.zoom, false);
+    applyEditorDimensions();
     state.renderer.clearCache();
     render();
     updatePrintSize();
@@ -1193,6 +1195,118 @@ function updatePrintSize() {
   } else {
     $('#print-size').textContent = `${width} x ${height} mm`;
   }
+  updateEditorRotationControls();
+}
+
+/**
+ * Return the dimensions shown in the editor. The saved label dimensions are
+ * always the physical printer dimensions.
+ */
+function getEditorLabelSize() {
+  if (state.editorRotation === 90 && !state.labelSize.round && !state.multiLabel.enabled) {
+    return { width: state.labelSize.height, height: state.labelSize.width };
+  }
+  return { width: state.labelSize.width, height: state.labelSize.height };
+}
+
+/** Apply the current editor orientation without changing the physical size. */
+function applyEditorDimensions() {
+  const editorSize = getEditorLabelSize();
+  state.renderer.setDimensions(
+    editorSize.width,
+    editorSize.height,
+    state.zoom,
+    state.labelSize.round || false
+  );
+  updateEditorRotationControls();
+}
+
+/** Keep desktop and mobile editor-orientation controls in sync. */
+function updateEditorRotationControls() {
+  const disabled = !!state.labelSize.round || state.multiLabel.enabled;
+  const active = state.editorRotation === 90 && !disabled;
+  const designSize = getEditorLabelSize();
+  const title = disabled
+    ? 'Design view rotation is available for single rectangular labels'
+    : `Rotate design view (currently ${designSize.width} × ${designSize.height} mm; print size stays ${state.labelSize.width} × ${state.labelSize.height} mm)`;
+
+  for (const button of [$('#rotate-design-btn'), $('#mobile-rotate-design-btn')]) {
+    if (!button) continue;
+    button.disabled = disabled;
+    button.setAttribute('aria-pressed', String(active));
+    button.title = title;
+    button.classList.toggle('border-purple-400', active);
+    button.classList.toggle('bg-purple-100', active);
+    button.classList.toggle('text-purple-700', active);
+  }
+
+  const mobileLabel = $('#mobile-rotate-design-btn span');
+  if (mobileLabel) {
+    mobileLabel.textContent = active
+      ? `Design view: ${designSize.width} × ${designSize.height} mm`
+      : 'Rotate design view';
+  }
+}
+
+/**
+ * Rotate every element with the editor surface. Dimensions stay the same;
+ * only the element centre and angle change under a canvas rotation.
+ */
+function rotateElementsWithCanvas(direction, oldWidth, oldHeight) {
+  state.elements = state.elements.map(element => {
+    const centerX = element.x + element.width / 2;
+    const centerY = element.y + element.height / 2;
+    const clockwise = direction === 'cw';
+    const newCenterX = clockwise ? oldHeight - centerY : centerY;
+    const newCenterY = clockwise ? centerX : oldWidth - centerX;
+    const angleDelta = clockwise ? 90 : -90;
+
+    return {
+      ...element,
+      x: newCenterX - element.width / 2,
+      y: newCenterY - element.height / 2,
+      rotation: ((Number(element.rotation || 0) + angleDelta) % 360 + 360) % 360,
+    };
+  });
+}
+
+/** Normalize a rotated editor before entering a mode that cannot rotate. */
+function resetEditorRotation() {
+  if (state.editorRotation !== 90 || !state.renderer) return;
+  rotateElementsWithCanvas('ccw', state.renderer.labelWidth, state.renderer.labelHeight);
+  state.editorRotation = 0;
+}
+
+/** Toggle between the physical view and a clockwise-rotated design view. */
+function toggleEditorRotation() {
+  if (state.labelSize.round || state.multiLabel.enabled) {
+    showToast('Design view rotation is available for single rectangular labels', 'info');
+    return;
+  }
+
+  synchronizeMirrors();
+  const oldWidth = state.renderer.labelWidth;
+  const oldHeight = state.renderer.labelHeight;
+  const activating = state.editorRotation !== 90;
+  rotateElementsWithCanvas(activating ? 'cw' : 'ccw', oldWidth, oldHeight);
+  state.editorRotation = activating ? 90 : 0;
+
+  applyEditorDimensions();
+  state.renderer.clearCache();
+  resetHistory();
+  zoomToFitIfNeeded();
+  updatePropertiesPanel();
+  render();
+
+  const designSize = getEditorLabelSize();
+  setStatus(
+    `Design view ${designSize.width}×${designSize.height}mm; print remains ${state.labelSize.width}×${state.labelSize.height}mm`
+  );
+}
+
+/** Raster rotation required to restore the physical printer orientation. */
+function getPrintOutputRotation() {
+  return state.editorRotation === 90 && !state.multiLabel.enabled ? 'ccw' : 'none';
 }
 
 /**
@@ -2205,8 +2319,8 @@ async function handleBatchPrint() {
         ditherMode = 'threshold';
       }
       const rasterData = isRotatedPrinter(deviceName, printerModel)
-        ? state.renderer.getRasterDataRaw(mergedElements, ditherMode)
-        : state.renderer.getRasterData(mergedElements, printerWidth, 203, ditherMode, printerAlignment);
+        ? state.renderer.getRasterDataRaw(mergedElements, ditherMode, getPrintOutputRotation())
+        : state.renderer.getRasterData(mergedElements, printerWidth, 203, ditherMode, printerAlignment, getPrintOutputRotation());
 
       // Print
       await print(state.transport, rasterData, {
@@ -2292,8 +2406,8 @@ async function handlePrintSinglePreview() {
       ditherMode = 'threshold';
     }
     const rasterData = isRotatedPrinter(deviceName, printerModel)
-      ? state.renderer.getRasterDataRaw(mergedElements, ditherMode)
-      : state.renderer.getRasterData(mergedElements, printerWidth, 203, ditherMode, printerAlignment);
+      ? state.renderer.getRasterDataRaw(mergedElements, ditherMode, getPrintOutputRotation())
+      : state.renderer.getRasterData(mergedElements, printerWidth, 203, ditherMode, printerAlignment, getPrintOutputRotation());
 
     // Print
     await print(state.transport, rasterData, {
@@ -2966,6 +3080,7 @@ function handleLabelSizeChange() {
     $('#custom-size').classList.add('hidden');
     const preset = LABEL_SIZES[value];
     if (preset) {
+      if (preset.round) resetEditorRotation();
       state.labelSize = { ...preset };
     }
   }
@@ -2975,7 +3090,7 @@ function handleLabelSizeChange() {
     exitMultiLabelMode();
   }
 
-  state.renderer.setDimensions(state.labelSize.width, state.labelSize.height, state.zoom, state.labelSize.round || false);
+  applyEditorDimensions();
   updatePrintSize();
   updateLengthAdjustButtons();
 
@@ -2994,6 +3109,8 @@ function handleCustomSizeChange() {
   const isContinuous = !isRound && !!$('#custom-continuous')?.checked;
   const h = isRound ? w : validateLabelHeight($('#custom-height').value);
 
+  if (isRound) resetEditorRotation();
+
   // Sync height input when round is checked
   if (isRound) {
     $('#custom-height').value = w;
@@ -3007,7 +3124,7 @@ function handleCustomSizeChange() {
   }
 
   state.labelSize = { width: w, height: h, round: isRound, continuous: isContinuous };
-  state.renderer.setDimensions(state.labelSize.width, state.labelSize.height, state.zoom, isRound);
+  applyEditorDimensions();
   updatePrintSize();
   updateLengthAdjustButtons();
 
@@ -3081,6 +3198,10 @@ function applyMultiLabelConfig() {
   const gapMm = Math.max(0, Math.min(10, parseFloat($('#multi-label-gap').value) || 2));
   const cloneMode = $('#multi-label-clone-mode').checked;
 
+  // Multi-label rolls have their own zone orientation, so restore the physical
+  // single-label view before entering that mode.
+  resetEditorRotation();
+
   // Update state
   state.multiLabel = {
     enabled: true,
@@ -3139,7 +3260,8 @@ function exitMultiLabelMode() {
   // Reset to default label size
   $('#label-size').value = '40x30';
   state.labelSize = { width: 40, height: 30, round: false };
-  state.renderer.setDimensions(40, 30, state.zoom, false);
+  state.editorRotation = 0;
+  applyEditorDimensions();
 
   updatePrintSize();
   render();
@@ -5313,8 +5435,8 @@ async function handlePrint() {
       console.log('TSPL printer: forcing threshold mode for crisp barcodes');
     }
     const rasterData = isRotatedPrinter(deviceName, printerModel)
-      ? state.renderer.getRasterDataRaw(elementsToRender, ditherMode)
-      : state.renderer.getRasterData(elementsToRender, printerWidth, printerDpi, ditherMode, printerAlignment);
+      ? state.renderer.getRasterDataRaw(elementsToRender, ditherMode, getPrintOutputRotation())
+      : state.renderer.getRasterData(elementsToRender, printerWidth, printerDpi, ditherMode, printerAlignment, getPrintOutputRotation());
 
     // Print multiple copies if requested
     for (let copy = 1; copy <= copies; copy++) {
@@ -5452,6 +5574,7 @@ function handleSave() {
     const designData = {
       elements: state.elements,
       labelSize: state.labelSize,
+      editorRotation: state.editorRotation,
     };
 
     // Include template data and its explicit column schema if present
@@ -5573,9 +5696,10 @@ function handleExport() {
   // Build export data
   const exportData = {
     name: 'Untitled Design',
-    version: 6, // Version 6 supports linked mirrored elements
+    version: 9, // Version 9 supports a rotated editor view with physical print dimensions
     elements: state.elements,
     labelSize: state.labelSize,
+    editorRotation: state.editorRotation,
     exportedAt: new Date().toISOString(),
   };
 
@@ -5615,6 +5739,20 @@ function handleExport() {
   setStatus('Design exported');
 }
 
+/** Return a canvas in physical label orientation for image/PDF exports. */
+function getPhysicalOutputCanvas(sourceCanvas) {
+  if (getPrintOutputRotation() !== 'ccw') return sourceCanvas;
+
+  const rotatedCanvas = document.createElement('canvas');
+  rotatedCanvas.width = sourceCanvas.height;
+  rotatedCanvas.height = sourceCanvas.width;
+  const context = rotatedCanvas.getContext('2d');
+  context.translate(0, sourceCanvas.width);
+  context.rotate(-Math.PI / 2);
+  context.drawImage(sourceCanvas, 0, 0);
+  return rotatedCanvas;
+}
+
 /**
  * Export current design to PDF
  */
@@ -5641,6 +5779,7 @@ function handleExportPDF() {
 
   // Render elements (reuse existing render logic)
   state.renderer.renderAllToContext(tempCtx, elementsToRender, [], { forPrint: true });
+  const outputCanvas = getPhysicalOutputCanvas(tempCanvas);
 
   // Get label dimensions in mm
   const widthMm = state.labelSize.width;
@@ -5655,7 +5794,7 @@ function handleExportPDF() {
   });
 
   // Add canvas as image to PDF
-  const imgData = tempCanvas.toDataURL('image/png');
+  const imgData = outputCanvas.toDataURL('image/png');
   pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm);
 
   // Download PDF
@@ -5689,9 +5828,10 @@ function handleExportPNG() {
   tempCtx.fillStyle = 'white';
   tempCtx.fillRect(0, 0, state.renderer.labelWidth, state.renderer.labelHeight);
   state.renderer.renderAllToContext(tempCtx, elementsToRender, [], { forPrint: true });
+  const outputCanvas = getPhysicalOutputCanvas(tempCanvas);
 
   // Download as PNG
-  tempCanvas.toBlob((blob) => {
+  outputCanvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -5729,10 +5869,12 @@ function handleImportFile(file) {
 
       // Load the design
       state.elements = data.elements;
+      state.editorRotation = data.editorRotation === 90 ? 90 : 0;
 
       // Load label size if present
       if (data.labelSize) {
         state.labelSize = data.labelSize;
+        if (state.labelSize.round) state.editorRotation = 0;
         // Update the label size dropdown
         const sizeKey = data.labelSize.round
           ? `${data.labelSize.width}mm Round`
@@ -5761,7 +5903,7 @@ function handleImportFile(file) {
 
       // Clear selection and update renderer
       state.selectedIds = [];
-      state.renderer.setDimensions(state.labelSize.width, state.labelSize.height, state.zoom, state.labelSize.round || false);
+      applyEditorDimensions();
       state.renderer.clearCache();
       resetHistory();
       updatePrintSize();
@@ -5886,6 +6028,7 @@ function handleLoad(name) {
 
   state.elements = design.elements || [];
   state.labelSize = design.labelSize || { width: 40, height: 30 };
+  state.editorRotation = design.editorRotation === 90 ? 90 : 0;
   state.selectedIds = [];
 
   // Restore template data and preserve an explicit empty-column schema.
@@ -5895,6 +6038,7 @@ function handleLoad(name) {
 
   // Restore multi-label config if present
   if (design.multiLabel && design.multiLabel.enabled) {
+    state.editorRotation = 0;
     state.multiLabel = { ...design.multiLabel };
     state.activeZone = 0;
 
@@ -5941,7 +6085,8 @@ function handleLoad(name) {
       $('#custom-height').value = state.labelSize.height;
     }
 
-    state.renderer.setDimensions(state.labelSize.width, state.labelSize.height, state.zoom, state.labelSize.round || false);
+    if (state.labelSize.round) state.editorRotation = 0;
+    applyEditorDimensions();
   }
 
   state.renderer.clearCache();
@@ -6439,6 +6584,7 @@ function initMobileUI() {
     showInfoDialog();
   });
   $('#mobile-print-btn')?.addEventListener('click', handlePrint);
+  $('#mobile-rotate-design-btn')?.addEventListener('click', toggleEditorRotation);
 
   // Mobile dither preview toggle
   $('#mobile-dither-preview-btn')?.addEventListener('click', () => {
@@ -7874,7 +8020,7 @@ function init() {
   // Create canvas renderer
   const canvas = $('#preview-canvas');
   state.renderer = new CanvasRenderer(canvas);
-  state.renderer.setDimensions(state.labelSize.width, state.labelSize.height, state.zoom, state.labelSize.round || false);
+  applyEditorDimensions();
   // Re-render when async content (barcodes, QR codes) finishes loading
   // Use requestAnimationFrame to batch multiple async loads
   let asyncRenderPending = false;
@@ -7895,6 +8041,7 @@ function init() {
   $('#custom-height').addEventListener('change', handleCustomSizeChange);
   $('#custom-round').addEventListener('change', handleCustomSizeChange);
   $('#custom-continuous')?.addEventListener('change', handleCustomSizeChange);
+  $('#rotate-design-btn')?.addEventListener('click', toggleEditorRotation);
 
   // P12/A30 label length adjust buttons
   $('#length-plus')?.addEventListener('click', () => adjustLabelLength(5));

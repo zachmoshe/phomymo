@@ -179,6 +179,7 @@ export function importDesign(jsonString, overrideName = null) {
     const designData = {
       elements: data.elements,
       labelSize: data.labelSize,
+      editorRotation: data.editorRotation === 90 ? 90 : 0,
     };
 
     // Import template data if present

@@ -420,6 +420,9 @@
               <span class="text-xs text-gray-500">Continuous</span>
             </label>
           </div>
+          <button id="rotate-design-btn" class="w-8 h-8 shrink-0 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 transition-colors hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-40" type="button" title="Rotate the design view (physical print size stays unchanged)" aria-label="Rotate design view" aria-pressed="false">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6M5.5 15a7 7 0 0 0 11.9 2.4L20 14M4 10l2.6-3.4A7 7 0 0 1 18.5 9"/></svg>
+          </button>
         </div>
 
         <!-- File actions -->
@@ -2029,6 +2032,10 @@
               <button id="mobile-length-plus" class="w-8 h-8 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-lg font-bold">+</button>
             </div>
           </div>
+          <button id="mobile-rotate-design-btn" class="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 active:bg-purple-50 disabled:opacity-40" type="button" aria-pressed="false">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6M5.5 15a7 7 0 0 0 11.9 2.4L20 14M4 10l2.6-3.4A7 7 0 0 1 18.5 9"/></svg>
+            <span>Rotate design view</span>
+          </button>
           <!-- Tape width selector (hidden by default, shown for tape printers like P12/A30) -->
           <div id="mobile-tape-width-selector" class="hidden mt-2">
             <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tape Width</label>
@@ -2294,7 +2301,7 @@
     pdfjsModule.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
     window.pdfjsLib = pdfjsModule;
   </script>
-  <script type="module" src="app.js?v=164"></script>
+  <script type="module" src="app.js?v=168"></script>
   <script>
     // Show body once styles are ready
     requestAnimationFrame(() => {
