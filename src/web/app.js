@@ -1,7 +1,7 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v172
+ * v173
  */
 
 import { CanvasRenderer } from './canvas.js?v=124';
@@ -1196,6 +1196,7 @@ function updatePrintSize() {
     $('#print-size').textContent = `${width} x ${height} mm`;
   }
   updateEditorRotationControls();
+  updateFeedDirectionIndicator();
 }
 
 /**
@@ -1421,6 +1422,23 @@ function render() {
     ? evaluateExpressions(state.elements)
     : state.elements;
   state.renderer.renderAll(elementsToRender, state.selectedIds, state.alignmentGuides);
+  updateFeedDirectionIndicator();
+}
+
+/** Point toward the leading edge (printed first), without marking the label. */
+function updateFeedDirectionIndicator() {
+  const indicator = $('#feed-direction');
+  if (!indicator || !state.renderer) return;
+  const deviceName = state.transport?.getDeviceName?.() || '';
+  // D/P-series rotate the raster clockwise in their protocol, so their
+  // leading edge is the editor's left edge before any design-view rotation.
+  const printerAngle = isRotatedPrinter(deviceName, state.printSettings.printerModel) ? -90 : 0;
+  const viewAngle = getPrintOutputRotation() === 'ccw' ? 90 : 0;
+  const angle = (printerAngle + viewAngle + 360) % 360;
+  const direction = { 0: 'up', 90: 'right', 180: 'down', 270: 'left' }[angle];
+  indicator.dataset.direction = direction;
+  indicator.setAttribute('aria-label', `Printer feed direction: ${direction}. The arrow points toward the edge printed first.`);
+  $('#feed-direction-arrow').style.transform = `rotate(${angle}deg)`;
 }
 
 /**

@@ -308,7 +308,7 @@
       transform: translateX(0) !important;
     }
   </style>
-  <link rel="stylesheet" href="ui.css?v=11">
+  <link rel="stylesheet" href="ui.css?v=12">
 </head>
 <body class="app-shell bg-gray-100 h-screen flex flex-col overflow-hidden">
 
@@ -667,6 +667,10 @@
     <div class="canvas-workspace flex-1 flex items-center justify-center p-3 sm:p-6 overflow-auto relative">
       <div id="canvas-container" class="rounded-lg shadow-inner transition-transform origin-center" style="touch-action: none;">
         <canvas id="preview-canvas" class="cursor-crosshair rounded-lg" style="touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;"></canvas>
+      </div>
+      <div id="feed-direction" role="img" aria-label="Printer feed direction: up. The arrow points toward the edge printed first.">
+        <svg id="feed-direction-arrow" width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 23V3M5 11l8-8 8 8"/></svg>
+        <span aria-hidden="true">Feed</span>
       </div>
 
       <!-- Inline Text Editor Overlay -->
@@ -2318,7 +2322,7 @@
     pdfjsModule.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
     window.pdfjsLib = pdfjsModule;
   </script>
-  <script type="module" src="app.js?v=172"></script>
+  <script type="module" src="app.js?v=173"></script>
   <script>
     // Show body once styles are ready
     requestAnimationFrame(() => {

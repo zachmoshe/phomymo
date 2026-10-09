@@ -443,6 +443,30 @@ button.toolbar-btn.toolbar-btn-menu {
   border-radius: 15px !important;
 }
 
+/* Editor-only cue, kept in view even when the zoomed canvas extends offscreen. */
+#feed-direction {
+  position: absolute;
+  top: 16px;
+  right: 22px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #514666;
+  opacity: 0.45;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+#feed-direction-arrow {
+  flex-shrink: 0;
+}
+
 #zoom-controls {
   gap: 6px !important;
   padding: 6px 8px !important;
@@ -938,6 +962,11 @@ input[type='range'] {
 }
 
 @media (max-width: 767px) {
+  #feed-direction {
+    top: 70px;
+    right: 18px;
+  }
+
   body.app-shell {
     padding-top: 58px;
     padding-bottom: 96px;
