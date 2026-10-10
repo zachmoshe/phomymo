@@ -308,7 +308,7 @@
       transform: translateX(0) !important;
     }
   </style>
-  <link rel="stylesheet" href="ui.css?v=12">
+  <link rel="stylesheet" href="ui.css?v=16">
 </head>
 <body class="app-shell bg-gray-100 h-screen flex flex-col overflow-hidden">
 
@@ -332,7 +332,15 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
           </svg>
         </button>
-        <button id="mobile-print-btn" class="p-2 bg-gray-900 text-white rounded-lg active:bg-gray-700 flex-shrink-0">
+        <div class="print-copies-control" role="group" aria-label="Print copies">
+          <span aria-hidden="true">×</span>
+          <input type="number" id="mobile-print-copies" aria-label="Copies" min="1" max="99" step="1" value="1" inputmode="numeric">
+          <div class="print-copies-stepper">
+            <button type="button" data-copy-step="1" aria-label="Increase copies"><svg viewBox="0 0 12 8" aria-hidden="true"><path d="m2 6 4-4 4 4"/></svg></button>
+            <button type="button" data-copy-step="-1" aria-label="Decrease copies"><svg viewBox="0 0 12 8" aria-hidden="true"><path d="m2 2 4 4 4-4"/></svg></button>
+          </div>
+        </div>
+        <button id="mobile-print-btn" aria-label="Print" class="p-2 bg-gray-900 text-white rounded-lg active:bg-gray-700 flex-shrink-0">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
           </svg>
@@ -485,6 +493,14 @@
           <button id="print-settings-btn" class="p-1.5 sm:p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors" title="Print Settings">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
           </button>
+          <div class="print-copies-control" role="group" aria-label="Print copies">
+            <span aria-hidden="true">×</span>
+            <input type="number" id="print-copies" aria-label="Copies" min="1" max="99" step="1" value="1" inputmode="numeric">
+            <div class="print-copies-stepper">
+              <button type="button" data-copy-step="1" aria-label="Increase copies"><svg viewBox="0 0 12 8" aria-hidden="true"><path d="m2 6 4-4 4 4"/></svg></button>
+              <button type="button" data-copy-step="-1" aria-label="Decrease copies"><svg viewBox="0 0 12 8" aria-hidden="true"><path d="m2 2 4 4 4-4"/></svg></button>
+            </div>
+          </div>
           <button id="print-btn" class="px-3 sm:px-5 py-1.5 sm:py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs sm:text-sm font-medium rounded-r-lg transition-colors">
             Print
           </button>
@@ -1429,12 +1445,6 @@
           </div>
         </div>
 
-        <!-- Copies -->
-        <div>
-          <div class="prop-label">Copies</div>
-          <input type="number" id="print-copies" min="1" max="99" value="1" class="prop-input w-20">
-        </div>
-
         <!-- Feed After Print -->
         <div>
           <div class="prop-label">Feed After Print</div>
@@ -2322,7 +2332,7 @@
     pdfjsModule.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
     window.pdfjsLib = pdfjsModule;
   </script>
-  <script type="module" src="app.js?v=173"></script>
+  <script type="module" src="app.js?v=176"></script>
   <script>
     // Show body once styles are ready
     requestAnimationFrame(() => {

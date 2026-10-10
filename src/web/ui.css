@@ -133,6 +133,92 @@ body.app-shell {
   font-weight: 600;
 }
 
+.print-copies-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 1px;
+  width: auto;
+  height: 38px;
+  border: 0;
+  background: transparent;
+  color: var(--ui-ink);
+}
+
+.print-copies-control span {
+  font-size: 22px;
+  line-height: 38px;
+  font-weight: 400;
+  color: var(--ui-muted);
+}
+
+.print-copies-control input[type='number'] {
+  width: 1ch;
+  min-width: 1ch;
+  flex: 0 0 auto;
+  height: 38px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none;
+  outline: none;
+  font-size: 21px;
+  line-height: 38px;
+  font-weight: 600;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+.print-copies-control input::-webkit-inner-spin-button,
+.print-copies-control input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.print-copies-stepper {
+  display: flex;
+  flex-direction: column;
+  width: 18px;
+  height: 100%;
+}
+
+.print-copies-stepper button {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  color: var(--ui-muted);
+  background: transparent;
+}
+
+.print-copies-stepper button:hover {
+  color: var(--ui-accent);
+  background: var(--ui-accent-soft);
+}
+
+.print-copies-stepper svg {
+  width: 12px;
+  height: 8px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.print-copies-control input:focus-visible,
+.print-copies-stepper button:focus-visible {
+  outline: none !important;
+  box-shadow: none;
+  color: var(--ui-accent);
+  background: var(--ui-accent-soft) !important;
+}
+
 #label-size {
   min-width: 132px;
   padding-left: 12px !important;

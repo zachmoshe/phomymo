@@ -1,7 +1,7 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v173
+ * v176
  */
 
 import { CanvasRenderer } from './canvas.js?v=124';
@@ -8245,7 +8245,7 @@ function init() {
   const printSettingsDialog = $('#print-settings-dialog');
   const densitySlider = $('#print-density');
   const densityValue = $('#print-density-value');
-  const copiesInput = $('#print-copies');
+  const copiesInputs = [$('#print-copies'), $('#mobile-print-copies')];
   const feedSelect = $('#print-feed');
   const printerModelSelect = $('#printer-model');
 
@@ -8263,10 +8263,37 @@ function init() {
       state.printSettings = { ...state.printSettings, ...settings };
       densitySlider.value = state.printSettings.density;
       densityValue.textContent = state.printSettings.density;
-      copiesInput.value = state.printSettings.copies;
       feedSelect.value = state.printSettings.feed;
       printerModelSelect.value = state.printSettings.printerModel || 'auto';
     }
+  }
+
+  // Copies live beside Print and apply immediately, independently of the dialog.
+  function setPrintCopies(value, editingInput = null, persist = true) {
+    const number = Number(value);
+    state.printSettings.copies = Number.isFinite(number)
+      ? Math.max(PRINT.MIN_COPIES, Math.min(PRINT.MAX_COPIES, Math.floor(number)))
+      : PRINT.DEFAULT_COPIES;
+    for (const input of copiesInputs) {
+      // Don't rewrite the active field while someone is typing a multi-digit value.
+      if (input !== editingInput) input.value = state.printSettings.copies;
+      input.style.width = `${Math.max(1, Math.min(3, input.value.length))}ch`;
+    }
+    if (persist) safeStorageSet('phomymo_print_settings', safeJsonStringify(state.printSettings));
+  }
+  setPrintCopies(state.printSettings.copies, null, false);
+  for (const button of $$('[data-copy-step]')) {
+    button.addEventListener('click', () => {
+      setPrintCopies(state.printSettings.copies + Number(button.dataset.copyStep));
+    });
+  }
+  for (const input of copiesInputs) {
+    input.addEventListener('input', () => {
+      input.style.width = `${Math.max(1, Math.min(3, input.value.length))}ch`;
+      if (input.value !== '') setPrintCopies(input.value, input);
+    });
+    input.addEventListener('change', () => setPrintCopies(input.value));
+    input.addEventListener('blur', () => setPrintCopies(input.value));
   }
 
   // Dither preview toggle (shows exact print output for all elements)
@@ -8298,7 +8325,6 @@ function init() {
     // Update dialog with current values
     densitySlider.value = state.printSettings.density;
     densityValue.textContent = state.printSettings.density;
-    copiesInput.value = state.printSettings.copies;
     feedSelect.value = state.printSettings.feed;
     printerModelSelect.value = state.printSettings.printerModel || 'auto';
     printSettingsDialog.classList.remove('hidden');
@@ -8313,17 +8339,15 @@ function init() {
   });
 
   $('#print-settings-reset').addEventListener('click', () => {
-    state.printSettings = { density: 6, copies: 1, feed: 32, printerModel: 'auto' };
+    state.printSettings = { density: 6, copies: state.printSettings.copies, feed: 32, printerModel: 'auto' };
     densitySlider.value = 6;
     densityValue.textContent = '6';
-    copiesInput.value = 1;
     feedSelect.value = 32;
     printerModelSelect.value = 'auto';
   });
 
   $('#print-settings-save').addEventListener('click', () => {
     state.printSettings.density = parseInt(densitySlider.value);
-    state.printSettings.copies = Math.max(PRINT.MIN_COPIES, Math.min(PRINT.MAX_COPIES, parseInt(copiesInput.value) || PRINT.DEFAULT_COPIES));
     state.printSettings.feed = parseInt(feedSelect.value);
     state.printSettings.printerModel = printerModelSelect.value;
 
