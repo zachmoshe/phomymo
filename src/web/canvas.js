@@ -6,6 +6,7 @@
 import { drawHandles, drawGroupHandles } from './handles.js?v=5';
 import { logError, ErrorLevel } from './utils/errors.js';
 import { PX_PER_MM } from './constants.js?v=107';
+import { resolveTextDirection } from './utils/text-direction.js';
 
 // Default printer width in bytes (72 bytes = 576 pixels for M260)
 // M110/M200 use 48 bytes (384 pixels)
@@ -196,7 +197,7 @@ export class CanvasRenderer {
     // Create cache key from element states
     const cacheKey = JSON.stringify(elements.map(e => ({
       id: e.id, x: e.x, y: e.y, width: e.width, height: e.height,
-      rotation: e.rotation, type: e.type, text: e.text,
+      rotation: e.rotation, type: e.type, text: e.text, textDirection: e.textDirection,
       imageData: e.imageData?.substring(0, 50), // Just enough to detect changes
       barcodeData: e.barcodeData, qrData: e.qrData,
       brightness: e.brightness, contrast: e.contrast, dither: e.dither,
@@ -1002,6 +1003,7 @@ export class CanvasRenderer {
     }
 
     if (!text || !text.trim()) return;
+    this.ctx.direction = resolveTextDirection(text, element.textDirection);
 
     // Set up clipping region if clipOverflow is enabled
     if (clipOverflow) {
@@ -1019,7 +1021,7 @@ export class CanvasRenderer {
     let effectiveFontSize = fontSize;
     if (autoScale) {
       effectiveFontSize = textMode === 'labels'
-        ? this.calculateLabelAutoScaleFontSize(text, width, height, fontFamily, fontWeight, fontStyle, noWrap)
+        ? this.calculateLabelAutoScaleFontSize(text, width, height, fontFamily, fontWeight, fontStyle, noWrap, element.textDirection)
         : this.calculateAutoScaleFontSize(text, width, height, fontFamily, fontWeight, fontStyle, noWrap);
     }
 
@@ -1044,6 +1046,7 @@ export class CanvasRenderer {
         align,
         verticalAlign,
         noWrap,
+        textDirection: element.textDirection,
       });
       if (clipOverflow) this.ctx.restore();
       return;
@@ -1062,14 +1065,14 @@ export class CanvasRenderer {
     }
 
     // Get lines - either wrapped or split by newlines only
-    let lines;
-    if (noWrap) {
-      // No wrap mode: only split by explicit newlines, allow overflow
-      lines = text.split('\n');
-    } else {
-      // Word wrap mode
-      lines = this.wrapText(text, width - 8, effectiveFontSize, fontFamily, fontWeight, fontStyle);
-    }
+    const lines = text.split('\n').flatMap(paragraph => {
+      const direction = resolveTextDirection(paragraph, element.textDirection);
+      this.ctx.direction = direction;
+      const wrapped = noWrap ? [paragraph] : this.wrapText(paragraph, width - 8, effectiveFontSize, fontFamily, fontWeight, fontStyle);
+      // Wrapped continuations keep their paragraph's direction, even if a line
+      // starts with a Latin product code inside a Hebrew paragraph.
+      return wrapped.map(line => ({ text: line, direction }));
+    });
 
     const lineHeight = effectiveFontSize * 1.2;
     const totalHeight = lines.length * lineHeight;
@@ -1108,7 +1111,8 @@ export class CanvasRenderer {
       }
     }
 
-    for (const line of lines) {
+    for (const { text: line, direction } of lines) {
+      this.ctx.direction = direction;
       this.ctx.fillText(line, textX, textY);
 
       // Draw underline manually if enabled
@@ -1212,7 +1216,7 @@ export class CanvasRenderer {
    * Measure label tokens into badge rows.
    * Explicit newlines always begin a new row; noWrap disables width wrapping.
    */
-  layoutLabelBadges(text, maxWidth, fontSize, fontFamily = 'Inter, sans-serif', fontWeight = 'normal', fontStyle = 'normal', noWrap = false) {
+  layoutLabelBadges(text, maxWidth, fontSize, fontFamily = 'Inter, sans-serif', fontWeight = 'normal', fontStyle = 'normal', noWrap = false, textDirection = 'auto') {
     const weight = fontWeight === 'bold' ? 'bold' : '';
     const style = fontStyle === 'italic' ? 'italic' : '';
     this.ctx.font = `${style} ${weight} ${fontSize}px ${fontFamily}`.trim();
@@ -1225,21 +1229,23 @@ export class CanvasRenderer {
     const rows = [];
 
     for (const paragraph of text.split('\n')) {
+      const direction = resolveTextDirection(paragraph, textDirection);
       const words = this.tokenizeLabelBadges(paragraph);
       if (words.length === 0) {
-        rows.push({ badges: [], width: 0 });
+        rows.push({ badges: [], width: 0, direction });
         continue;
       }
 
       let badges = [];
       let rowWidth = 0;
       for (const word of words) {
+        this.ctx.direction = resolveTextDirection(word, textDirection);
         const textWidth = this.ctx.measureText(word).width;
         const badge = { text: word, textWidth, width: textWidth + paddingX * 2 };
         const nextWidth = badges.length ? rowWidth + gapX + badge.width : badge.width;
 
         if (!noWrap && badges.length > 0 && nextWidth > maxWidth) {
-          rows.push({ badges, width: rowWidth });
+          rows.push({ badges, width: rowWidth, direction });
           badges = [badge];
           rowWidth = badge.width;
         } else {
@@ -1247,7 +1253,7 @@ export class CanvasRenderer {
           rowWidth = nextWidth;
         }
       }
-      rows.push({ badges, width: rowWidth });
+      rows.push({ badges, width: rowWidth, direction });
     }
 
     const totalHeight = rows.length * badgeHeight + Math.max(0, rows.length - 1) * gapY;
@@ -1269,6 +1275,7 @@ export class CanvasRenderer {
       align,
       verticalAlign,
       noWrap,
+      textDirection,
     } = options;
     const availableWidth = Math.max(1, width - 8);
     const layout = this.layoutLabelBadges(
@@ -1278,7 +1285,8 @@ export class CanvasRenderer {
       fontFamily,
       fontWeight,
       fontStyle,
-      noWrap
+      noWrap,
+      textDirection
     );
 
     let rowY;
@@ -1310,7 +1318,8 @@ export class CanvasRenderer {
         badgeX = -width / 2 + 4;
       }
 
-      for (const badge of row.badges) {
+      for (const badge of row.direction === 'rtl' ? [...row.badges].reverse() : row.badges) {
+        this.ctx.direction = resolveTextDirection(badge.text, textDirection);
         this.ctx.beginPath();
         this.ctx.roundRect(badgeX, rowY, badge.width, layout.badgeHeight, radius);
         this.ctx.stroke();
@@ -1334,7 +1343,7 @@ export class CanvasRenderer {
   }
 
   /** Calculate the largest badge font size that fits the element bounds. */
-  calculateLabelAutoScaleFontSize(text, width, height, fontFamily, fontWeight, fontStyle, noWrap) {
+  calculateLabelAutoScaleFontSize(text, width, height, fontFamily, fontWeight, fontStyle, noWrap, textDirection) {
     const availableWidth = Math.max(1, width - 8);
     const availableHeight = Math.max(1, height - 8);
     let minSize = 6;
@@ -1350,7 +1359,8 @@ export class CanvasRenderer {
         fontFamily,
         fontWeight,
         fontStyle,
-        noWrap
+        noWrap,
+        textDirection
       );
       const widestRow = Math.max(0, ...layout.rows.map(row => row.width));
       const fits = widestRow <= availableWidth && layout.totalHeight <= availableHeight;

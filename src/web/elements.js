@@ -40,6 +40,7 @@ export function createTextElement(text = 'Text', options = {}) {
     clipOverflow: options.clipOverflow ?? false,   // true = clip text at box boundary
     autoScale: options.autoScale ?? false,         // true = auto-fit text to box size
     textMode: options.textMode === 'labels' ? 'labels' : 'text', // plain text or word badges
+    textDirection: ['rtl', 'ltr'].includes(options.textDirection) ? options.textDirection : 'auto',
   };
 }
 

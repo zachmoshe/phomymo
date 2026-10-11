@@ -1,10 +1,11 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v180
+ * v181
  */
 
-import { CanvasRenderer } from './canvas.js?v=124';
+import { CanvasRenderer } from './canvas.js?v=125';
+import { normalizeTextDirection } from './utils/text-direction.js';
 import { BLETransport } from './ble.js?v=104';
 import { USBTransport } from './usb.js?v=101';
 import { print, printDensityTest, isDSeriesPrinter, isP12Printer, isA30Printer, isTapePrinter, isPM241Printer, isTSPLPrinter, isRotatedPrinter, getPrinterWidthBytes, getPrinterDpi, getPrinterAlignment, getPrinterDescription, isDeviceRecognized, getMatchedPattern, loadPrinterDefinitions, getAllPrinterDefinitions, getPrinterDefinition, getCustomPrinterDefinitions, saveCustomPrinterDefinition, deleteCustomPrinterDefinition, isBuiltinPrinter, resetBuiltinPrinter, getAvailableProtocols, getAvailableLabelPresets, getDetectedDefinition } from './printer.js?v=131';
@@ -40,7 +41,7 @@ import {
   collapseToSingleZone,
   hasElementsInHigherZones,
   removeElementsInHigherZones,
-} from './elements.js?v=107';
+} from './elements.js?v=108';
 import {
   HandleType,
   getHandleAtPoint,
@@ -62,7 +63,7 @@ import {
   recordPrintedDesign,
   PRINT_HISTORY_FOLDER,
 } from './storage.js?v=108';
-import { DesignLibrary } from './design-library.js?v=4';
+import { DesignLibrary } from './design-library.js?v=5';
 import {
   extractFields,
   hasTemplateFields,
@@ -2596,7 +2597,7 @@ function modifyElement(id, changes) {
 
   // Only clear cache if content or size changed (not just position/rotation)
   const contentKeys = ['width', 'height', 'text', 'textMode', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textDecoration', 'background', 'noWrap', 'clipOverflow', 'autoScale', 'verticalAlign', 'imageData', 'barcodeData', 'barcodeFormat', 'qrData', 'brightness', 'contrast', 'dither', 'showText', 'textFontSize', 'textBold', 'shapeType', 'fill', 'stroke', 'strokeWidth', 'strokeDash', 'cornerRadius', 'nonPrintable'];
-  const needsCacheClear = Object.keys(changes).some(key => contentKeys.includes(key));
+  const needsCacheClear = Object.keys(changes).some(key => key === 'textDirection' || contentKeys.includes(key));
   if (needsCacheClear) {
     state.renderer.clearCache(id);
   }
@@ -2831,6 +2832,7 @@ function startInlineEdit(elementId) {
   });
 
   // Set content and show
+  editor.dir = normalizeTextDirection(element.textDirection);
   editor.value = element.text || '';
   editor.classList.remove('hidden');
   editor.focus();
@@ -2974,6 +2976,8 @@ function updatePropertiesPanel() {
       $('#props-text').classList.remove('hidden');
       $('#prop-text-content').value = element.text || '';
       $('#prop-text-mode').value = element.textMode === 'labels' ? 'labels' : 'text';
+      $('#prop-text-direction').value = normalizeTextDirection(element.textDirection);
+      $('#prop-text-content').dir = normalizeTextDirection(element.textDirection);
       $('#prop-font-family').value = element.fontFamily || 'Inter, sans-serif';
       $('#prop-font-size').value = element.fontSize || 24;
       $('#prop-no-wrap').checked = element.noWrap || false;
@@ -6939,13 +6943,21 @@ function populateMobileProps() {
             ${fieldDropdownHtml('mobile-prop-text')}
           </div>
         </div>
-        <textarea id="mobile-prop-text" class="prop-input" rows="2">${escapeHtml(selected.text || '')}</textarea>
+        <textarea id="mobile-prop-text" class="prop-input" rows="2" dir="${normalizeTextDirection(selected.textDirection)}">${escapeHtml(selected.text || '')}</textarea>
       </div>
       <div class="prop-group">
         <div class="prop-label">Display</div>
         <select id="mobile-prop-textMode" class="prop-input">
           <option value="text" ${selected.textMode !== 'labels' ? 'selected' : ''}>Plain text</option>
           <option value="labels" ${selected.textMode === 'labels' ? 'selected' : ''}>Labels (word badges)</option>
+        </select>
+      </div>
+      <div class="prop-group">
+        <label class="prop-label" for="mobile-prop-textDirection">Text direction</label>
+        <select id="mobile-prop-textDirection" class="prop-input">
+          <option value="auto" ${normalizeTextDirection(selected.textDirection) === 'auto' ? 'selected' : ''}>Auto</option>
+          <option value="rtl" ${selected.textDirection === 'rtl' ? 'selected' : ''}>Right to left (RTL)</option>
+          <option value="ltr" ${selected.textDirection === 'ltr' ? 'selected' : ''}>Left to right (LTR)</option>
         </select>
       </div>
       <div class="prop-group">
@@ -7416,6 +7428,10 @@ function wireUpMobilePropHandlers(element) {
   $('#mobile-prop-fontSize')?.addEventListener('change', (e) => updateProp('fontSize', parseInt(e.target.value)));
   $('#mobile-prop-fontFamily')?.addEventListener('change', (e) => updateProp('fontFamily', e.target.value));
   $('#mobile-prop-textMode')?.addEventListener('change', (e) => updateProp('textMode', e.target.value));
+  $('#mobile-prop-textDirection')?.addEventListener('change', (e) => {
+    updateProp('textDirection', e.target.value);
+    $('#mobile-prop-text').dir = normalizeTextDirection(e.target.value);
+  });
 
   // Mobile add system fonts button
   $('#mobile-add-system-fonts-btn')?.addEventListener('click', async () => {
@@ -8646,6 +8662,10 @@ function init() {
 
   // === TEXT ELEMENT BINDINGS ===
   bindSelect('#prop-text-mode', 'textMode', 'text', bindCtx);
+  bindSelect('#prop-text-direction', 'textDirection', 'text', bindCtx);
+  $('#prop-text-direction').addEventListener('change', (e) => {
+    $('#prop-text-content').dir = normalizeTextDirection(e.target.value);
+  });
 
   // Checkboxes
   bindCheckbox('#prop-no-wrap', 'noWrap', 'text', bindCtx);

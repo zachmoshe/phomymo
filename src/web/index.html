@@ -935,6 +935,14 @@
             </select>
           </div>
 
+          <div>
+            <label for="prop-text-direction" class="text-[10px] text-gray-400 uppercase tracking-wide">Text direction</label>
+            <select id="prop-text-direction" class="prop-input" title="Auto detects the paragraph direction; alignment is controlled separately">
+              <option value="auto">Auto</option>
+              <option value="rtl">Right to left (RTL)</option>
+              <option value="ltr">Left to right (LTR)</option>
+            </select>
+          </div>
           <!-- Font & Size on same row -->
           <div class="grid grid-cols-3 gap-1.5">
             <div class="col-span-2">
@@ -2371,7 +2379,7 @@
     pdfjsModule.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
     window.pdfjsLib = pdfjsModule;
   </script>
-  <script type="module" src="app.js?v=180"></script>
+  <script type="module" src="app.js?v=181"></script>
   <script>
     // Show body once styles are ready
     requestAnimationFrame(() => {

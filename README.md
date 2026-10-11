@@ -34,6 +34,8 @@ python3 -m http.server 8080
 
 **Measurement Units** - Enter exact element positions and sizes in millimetres (the default) or switch the properties panel to pixels. The unit preference is saved in the browser.
 
+**RTL Text** - Text direction defaults to **Auto**, detecting Hebrew/Arabic or left-to-right text per paragraph, including in existing designs. Choose **Right to left (RTL)** or **Left to right (LTR)** in the text properties to override it for mixed-language text. Direction controls punctuation and Labels-mode badge order; horizontal alignment remains a separate setting. Direction is preserved in saved designs, linked copies, previews and printed output.
+
 **Label Sizes** - Preset sizes for each printer type, round labels, custom dimensions. Auto-switches based on connected printer. For labels that feed through the printer vertically, keep the real physical dimensions and use **Rotate design view** to work horizontally; printing and PNG/PDF export rotate the result back automatically. Multi-label rolls support clone or individual zone modes.
 
 **Templates & Batch Printing** - Variable fields with `{{FieldName}}` syntax, CSV import, preview grid, and batch printing with progress tracking.
