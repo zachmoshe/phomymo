@@ -1,7 +1,7 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v176
+ * v180
  */
 
 import { CanvasRenderer } from './canvas.js?v=124';
@@ -57,8 +57,12 @@ import {
   saveDesign,
   loadDesign,
   listDesigns,
-  deleteDesign,
-} from './storage.js?v=106';
+  importDesign,
+  folderPath,
+  recordPrintedDesign,
+  PRINT_HISTORY_FOLDER,
+} from './storage.js?v=108';
+import { DesignLibrary } from './design-library.js?v=4';
 import {
   extractFields,
   hasTemplateFields,
@@ -156,6 +160,7 @@ const state = {
   renderer: null,
   canPrint: true,   // Set to false if browser doesn't support Bluetooth/USB
   currentDesignName: null,  // Name of the currently loaded design
+  currentDesignId: null,   // Stable library identity; name and folder can change
   // Drag state
   isDragging: false,
   dragType: null, // 'move', 'resize', 'rotate'
@@ -2328,6 +2333,7 @@ async function handleBatchPrint() {
 
       // Evaluate instant expressions (date/time, etc.)
       const mergedElements = evaluateExpressions(substitutedElements);
+      const snapshot = capturePrintSnapshot(mergedElements);
 
       // Render to raster (use raw format for rotated printers like D-series and P12)
       const deviceName = state.transport.getDeviceName?.() || '';
@@ -2356,6 +2362,7 @@ async function handleBatchPrint() {
       });
 
       // Delay between prints
+      rememberPrintedDesign(snapshot);
       if (rowIndex < totalRows - 1 && !isPrintCancelled()) {
         updatePrintProgress(rowIndex + 1, totalRows, 'Waiting...');
         await new Promise(r => setTimeout(r, 500));
@@ -2417,6 +2424,7 @@ async function handlePrintSinglePreview() {
     // Substitute fields and evaluate expressions
     const substitutedElements = substituteFields(state.elements, record);
     const mergedElements = evaluateExpressions(substitutedElements);
+    const snapshot = capturePrintSnapshot(mergedElements);
 
     // Render to raster (use raw format for rotated printers like D-series and P12)
     const deviceName = state.transport.getDeviceName?.() || '';
@@ -2444,6 +2452,7 @@ async function handlePrintSinglePreview() {
       },
     });
 
+    rememberPrintedDesign(snapshot);
     setStatus('Label printed!');
     btn.textContent = originalText;
 
@@ -5419,6 +5428,23 @@ async function handleConnect(event) {
 /**
  * Handle print button click
  */
+function capturePrintSnapshot(elements) {
+  return JSON.parse(JSON.stringify({
+    name: state.currentDesignName || 'Printed design',
+    data: {
+      elements,
+      labelSize: state.labelSize,
+      editorRotation: state.editorRotation,
+      ...(state.multiLabel.enabled ? { multiLabel: state.multiLabel } : {}),
+    },
+  }));
+}
+
+function rememberPrintedDesign(snapshot) {
+  try { recordPrintedDesign(snapshot.name, snapshot.data); }
+  catch (error) { showToast(error.message, 'warning'); }
+}
+
 async function handlePrint() {
   const btn = $('#print-btn');
   const originalText = btn.textContent;
@@ -5446,6 +5472,7 @@ async function handlePrint() {
 
     // Evaluate instant expressions (date/time, etc.)
     const elementsToRender = evaluateExpressions(elements);
+    const snapshot = capturePrintSnapshot(elementsToRender);
 
     // Render to raster (use raw format for rotated printers like D-series and P12)
     const deviceName = state.transport.getDeviceName?.() || '';
@@ -5482,6 +5509,8 @@ async function handlePrint() {
       });
 
       // Small delay between copies
+      // One entry per action, retained even if a later copy fails.
+      if (copy === 1) rememberPrintedDesign(snapshot);
       if (copy < copies) {
         await new Promise(r => setTimeout(r, 500));
       }
@@ -5524,19 +5553,30 @@ function shouldShowInfoOnLoad() {
 /**
  * Show the naming dialog used for a first save or Save As.
  */
+let designLibrary;
+
+function refreshSaveDesignOptions() {
+  const folderId = $('#save-folder').value || null;
+  const designs = listDesigns().filter(d => d.folderId === folderId);
+  const select = $('#save-existing');
+  select.replaceChildren(new Option('Choose a saved design...', ''));
+  designs.forEach(({ id, name }) => select.add(new Option(name, id)));
+  $('#save-existing-wrap').classList.toggle('hidden', designs.length === 0);
+}
+
 function showSaveDialog({ saveAs = false } = {}) {
-  const designs = listDesigns();
-  const existingSelect = $('#save-existing');
-  const existingWrap = $('#save-existing-wrap');
-
-  existingSelect.replaceChildren(new Option('Choose a saved design...', ''));
-  designs.forEach(({ name }) => existingSelect.add(new Option(name, name)));
-  existingWrap.classList.toggle('hidden', designs.length === 0);
-
-  const suggestedName = saveAs ? (state.currentDesignName || '') : '';
-  $('#save-dialog-title').textContent = saveAs ? 'Save As' : 'Save Design';
+  designLibrary.fillFolderSelect($('#save-folder'));
+  refreshSaveDesignOptions();
+  $('#save-dialog-title').textContent = saveAs ? 'Save As' : 'Save to library';
+  let suggestedName = '';
+  if (saveAs && state.currentDesignName) {
+    const names = listDesigns().filter(d => d.folderId === ($('#save-folder').value || null)).map(d => d.name);
+    const base = `${state.currentDesignName} copy`;
+    suggestedName = base;
+    let suffix = 2;
+    while (names.includes(suggestedName)) suggestedName = `${base} (${suffix++})`;
+  }
   $('#save-name').value = suggestedName;
-  existingSelect.value = designs.some(design => design.name === suggestedName) ? suggestedName : '';
   $('#save-dialog').classList.remove('hidden');
   $('#save-name').focus();
   $('#save-name').select();
@@ -5570,6 +5610,7 @@ function handleNewDesign() {
   state.selectedRecords = [];
   state.currentPreviewIndex = 0;
   state.currentDesignName = null;
+  state.currentDesignId = null;
 
   // Preserve the active size configuration, including multi-label layouts.
   if (state.multiLabel.enabled) {
@@ -5632,9 +5673,11 @@ function getCurrentDesignData() {
 /**
  * Persist the current design under a known name.
  */
-function saveCurrentDesign(name) {
+function saveCurrentDesign(name, options = {}) {
   try {
-    saveDesign(name, getCurrentDesignData());
+    const id = Object.hasOwn(options, 'id') ? options.id : state.currentDesignId;
+    const folderId = Object.hasOwn(options, 'folderId') ? options.folderId : (id ? loadDesign(id)?.folderId || null : designLibrary.folderId);
+    state.currentDesignId = saveDesign(name, getCurrentDesignData(), { id, folderId });
 
     hideSaveDialog();
 
@@ -5656,7 +5699,7 @@ function saveCurrentDesign(name) {
  * Save over the currently loaded/saved design, or ask for a name on first save.
  */
 function handleSave() {
-  if (!state.currentDesignName) {
+  if (!state.currentDesignId || !loadDesign(state.currentDesignId)) {
     showSaveDialog();
     return;
   }
@@ -5674,75 +5717,21 @@ function handleSaveDialogConfirm() {
     return;
   }
 
-  saveCurrentDesign(nameValidation.sanitized);
+  const folderId = $('#save-folder').value || null;
+  const existing = listDesigns().find(d => d.name === nameValidation.sanitized && d.folderId === folderId);
+  if (existing && existing.id !== state.currentDesignId && !confirm(`Replace "${existing.name}" in this folder?`)) return;
+  saveCurrentDesign(nameValidation.sanitized, { id: existing?.id || null, folderId });
 }
 
 /**
  * Show load dialog
  */
 function showLoadDialog() {
-  const designs = listDesigns();
-  const listEl = $('#design-list');
-
-  if (designs.length === 0) {
-    listEl.innerHTML = '<div class="text-sm text-gray-400 text-center py-8">No saved designs</div>';
-  } else {
-    listEl.innerHTML = designs.map(d => {
-      // Build info badges
-      const badges = [];
-      if (d.hasImages) {
-        badges.push('<span class="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">🖼️</span>');
-      }
-      if (d.isTemplate) {
-        badges.push('<span class="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">Template</span>');
-      }
-      if (d.templateDataCount > 0) {
-        badges.push(`<span class="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded">${d.templateDataCount} records</span>`);
-      }
-      if (d.isMultiLabel) {
-        badges.push(`<span class="px-1.5 py-0.5 text-xs bg-orange-100 text-orange-700 rounded">${d.multiLabel.labelsAcross}-up</span>`);
-      }
-
-      const badgeHtml = badges.length > 0 ? `<div class="flex gap-1 mt-1">${badges.join('')}</div>` : '';
-
-      return `
-        <div class="design-item flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer border border-gray-100 mb-2" data-name="${d.name}">
-          <div class="flex-1">
-            <div class="font-medium text-sm text-gray-900">${d.name}</div>
-            <div class="text-xs text-gray-400">${d.labelSize.width}x${d.labelSize.height}mm · ${d.elementCount} elements</div>
-            ${badgeHtml}
-          </div>
-          <button class="delete-design text-red-500 hover:text-red-700 text-xs px-2 py-1 ml-2" data-name="${d.name}">Delete</button>
-        </div>
-      `;
-    }).join('');
-
-    // Bind click handlers
-    listEl.querySelectorAll('.design-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        if (e.target.classList.contains('delete-design')) {
-          e.stopPropagation();
-          const name = e.target.dataset.name;
-          if (confirm(`Delete "${name}"?`)) {
-            deleteDesign(name);
-            showLoadDialog(); // Refresh list
-            setStatus(`Design "${name}" deleted`);
-          }
-          return;
-        }
-        handleLoad(item.dataset.name);
-      });
-    });
-  }
-
-  $('#load-dialog').classList.remove('hidden');
+  designLibrary.show();
 }
 
-/**
- * Hide load dialog
- */
 function hideLoadDialog() {
-  $('#load-dialog').classList.add('hidden');
+  designLibrary.hide();
 }
 
 /**
@@ -5758,7 +5747,7 @@ function handleExport() {
 
   // Build export data
   const exportData = {
-    name: 'Untitled Design',
+    name: state.currentDesignName || 'Untitled Design',
     version: 9, // Version 9 supports a rotated editor view with physical print dimensions
     elements: state.elements,
     labelSize: state.labelSize,
@@ -5913,81 +5902,26 @@ function handleExportPNG() {
  * Import design from file
  */
 function handleImportFile(file) {
-  // Validate file at function boundary
   const validation = validateJSONFile(file);
   if (!validation.valid) {
     setStatus(validation.error);
     return;
   }
-
+  // Capture the destination before asynchronous file reading starts.
+  const folderId = designLibrary.folderId;
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = (event) => {
     try {
-      const data = JSON.parse(e.target.result);
-
-      // Validate the data
-      if (!data.elements || !Array.isArray(data.elements)) {
-        throw new Error('Invalid design file: missing elements');
-      }
-
-      // Load the design
-      state.elements = data.elements;
-      state.editorRotation = data.editorRotation === 90 ? 90 : 0;
-
-      // Load label size if present
-      if (data.labelSize) {
-        state.labelSize = data.labelSize;
-        if (state.labelSize.round) state.editorRotation = 0;
-        // Update the label size dropdown
-        const sizeKey = data.labelSize.round
-          ? `${data.labelSize.width}mm Round`
-          : `${data.labelSize.width}x${data.labelSize.height}`;
-        const select = $('#label-size');
-        if (LABEL_SIZES[sizeKey]) {
-          select.value = sizeKey;
-          $('#custom-size').classList.add('hidden');
-        } else {
-          select.value = 'custom';
-          $('#custom-size').classList.remove('hidden');
-          $('#custom-width').value = data.labelSize.width;
-          $('#custom-height').value = data.labelSize.height;
-        }
-      }
-
-      // Load template data and preserve an explicit empty-column schema.
-      state.templateColumns = Array.isArray(data.templateColumns) ? [...data.templateColumns] : [];
-      if (data.templateData && Array.isArray(data.templateData)) {
-        state.templateData = data.templateData;
-        state.selectedRecords = data.templateData.map((_, i) => i); // Select all by default
-      } else {
-        state.templateData = [];
-        state.selectedRecords = [];
-      }
-
-      // Clear selection and update renderer
-      state.selectedIds = [];
-      applyEditorDimensions();
-      state.renderer.clearCache();
-      resetHistory();
-      updatePrintSize();
-      updateToolbarState();
-      updatePropertiesPanel();
-
-      // Detect template fields from elements
-      detectTemplateFields();
-
-      render();
-      hideLoadDialog();
-
-      const name = data.name || 'Imported design';
-      state.currentDesignName = name;
-      updateMobileLabelName();
-      setStatus(`Imported: ${name}`);
-    } catch (err) {
-      logError(err, 'importDesign');
-      setStatus(`Import failed: ${err.message}`);
+      const parsed = JSON.parse(event.target.result);
+      const result = importDesign(event.target.result, typeof parsed.name === 'string' ? parsed.name : file.name.replace(/\.json$/i, ''), folderId);
+      designLibrary.render();
+      setStatus(`Imported "${result.name}" into ${folderPath(folderId)}`);
+    } catch (error) {
+      $('#library-error').textContent = `Import failed: ${error.message}`;
+      setStatus(`Import failed: ${error.message}`);
     }
   };
+  reader.onerror = () => { $('#library-error').textContent = 'Could not read this file'; };
   reader.readAsText(file);
 }
 
@@ -6082,13 +6016,17 @@ function getElementLabel(el) {
 /**
  * Load a design
  */
-function handleLoad(name) {
-  const design = loadDesign(name);
+function handleLoad(id) {
+  const design = loadDesign(id);
   if (!design) {
     setStatus('Design not found');
     return;
   }
 
+  const name = design.name || id;
+  // History is immutable: editing and saving a snapshot creates a library design.
+  state.currentDesignId = design.folderId === PRINT_HISTORY_FOLDER ? null : id;
+  designLibrary.navigate(design.folderId || null);
   state.elements = design.elements || [];
   state.labelSize = design.labelSize || { width: 40, height: 30 };
   state.editorRotation = design.editorRotation === 90 ? 90 : 0;
@@ -8497,14 +8435,26 @@ function init() {
   $('#ungroup-btn').addEventListener('click', handleUngroup);
 
   // New/Save/Load
+  designLibrary = new DesignLibrary({
+    onOpen: handleLoad,
+    onSave: () => showSaveDialog({ saveAs: true }),
+    getSize: () => state.labelSize,
+    onChange: () => {
+      const current = state.currentDesignId && loadDesign(state.currentDesignId);
+      if (current) state.currentDesignName = current.name || state.currentDesignId;
+      else state.currentDesignId = null;
+      updateMobileLabelName();
+    },
+  });
   $('#new-btn').addEventListener('click', handleNewDesign);
   $('#save-btn').addEventListener('click', handleSave);
   $('#save-as-btn').addEventListener('click', () => showSaveDialog({ saveAs: true }));
   $('#save-cancel').addEventListener('click', hideSaveDialog);
   $('#save-confirm').addEventListener('click', handleSaveDialogConfirm);
   $('#save-existing').addEventListener('change', (e) => {
-    if (e.target.value) $('#save-name').value = e.target.value;
+    if (e.target.value) $('#save-name').value = loadDesign(e.target.value)?.name || e.target.value;
   });
+  $('#save-folder').addEventListener('change', refreshSaveDesignOptions);
   $('#save-name').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleSaveDialogConfirm();
   });

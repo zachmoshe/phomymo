@@ -46,7 +46,13 @@ python3 -m http.server 8080
 
 **Print Preview** - Toggle dither preview to see exact thermal print output before printing.
 
-**Export** - Save/load designs to browser storage, update the currently loaded design with **Save**, duplicate or overwrite named designs with **Save As**, export/import as JSON, and export to PDF or PNG.
+**Design Library** - Browse thumbnail cards with physical sticker width and height, search names, and filter by size. Create nested folders and use **Move / rename** to organize folders or designs. You can also drag a design onto a folder card, a sidebar folder, or an ancestor in the breadcrumb path to move it; duplicate names are rejected without overwriting. Existing saved designs appear in the library root. Click a card to edit it, use **Save** to update that same design, or **Save copy** to reuse it without changing the original. JSON files imported from the library go into the folder you are viewing; duplicate names receive a suffix instead of overwriting anything.
+
+Inside a library folder, click the **Up one level** arrow tile to open its parent, or drop a design onto it to move that design to the parent. The tile stays available when filtering or searching.
+
+**Previously printed** - A separate library section automatically keeps the newest 20 print snapshots, including filled-in template values and evaluated dates/times. Each Print action creates a new entry (multiple copies share one entry); batch printing creates one per printed label or multi-label row. Snapshots are recorded after data is successfully sent to the printer, not after hardware-confirmed paper output. Click a snapshot to reuse it, or choose **Keep in library** / drag it into a library folder to preserve it beyond the 20-item limit. Saving edits to an opened snapshot creates a regular library design. History is browser-local like the library; prints made before this feature was installed are not recoverable.
+
+**Export** - Export library designs or your current work as JSON, and export the current design to PDF or PNG. The library is stored only in this browser for this site address—not synced between localhost, GitHub Pages, or devices. Export JSON files for backup or transfer.
 
 **Mobile** - Full-featured touch UI with pinch-to-zoom, two-finger pan, slide-up property panels, and complete feature parity with desktop.
 

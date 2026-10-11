@@ -65,6 +65,7 @@ test.describe.serial('Save workflow', () => {
 
     await page.click('#save-as-btn');
     await page.locator('#save-existing').selectOption('Existing target');
+    page.once('dialog', dialog => dialog.accept());
     await page.click('#save-confirm');
 
     const savedDesigns = await page.evaluate(key => JSON.parse(localStorage.getItem(key) || '{}'), STORAGE_KEY);

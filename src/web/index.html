@@ -308,7 +308,7 @@
       transform: translateX(0) !important;
     }
   </style>
-  <link rel="stylesheet" href="ui.css?v=16">
+  <link rel="stylesheet" href="ui.css?v=20">
 </head>
 <body class="app-shell bg-gray-100 h-screen flex flex-col overflow-hidden">
 
@@ -439,17 +439,17 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 3h7l5 5v13H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3v5h5M12 12v6m3-3H9"/></svg>
             <span class="hidden sm:inline">New</span>
           </button>
-          <button id="save-btn" class="toolbar-btn" title="Save">
+          <button id="save-btn" class="toolbar-btn" title="Save design to your library">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
             <span class="hidden sm:inline">Save</span>
           </button>
           <button id="save-as-btn" class="toolbar-btn" title="Save as a new or existing design">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V5a2 2 0 012-2h7l4 4v10a2 2 0 01-2 2h-2M5 8h7l4 4v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-9a2 2 0 012-2z"/></svg>
-            <span class="hidden xl:inline">Save As</span>
+            <span class="hidden xl:inline">Save copy</span>
           </button>
-          <button id="load-btn" class="toolbar-btn" title="Load">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-            <span class="hidden sm:inline">Load</span>
+          <button id="load-btn" class="toolbar-btn" title="Browse your design library">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h4v16H4zM11 4h4v16h-4zM18 5l3 14M3 21h19"/></svg>
+            <span class="hidden sm:inline">Library</span>
           </button>
           <div class="relative">
             <button id="export-btn" class="toolbar-btn toolbar-btn-menu" title="Export">
@@ -1309,6 +1309,8 @@
   <div id="save-dialog" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
     <div class="bg-white rounded-xl p-6 w-80 shadow-xl">
       <h3 id="save-dialog-title" class="text-lg font-semibold text-gray-900 mb-4">Save Design</h3>
+      <label for="save-folder" class="block text-xs font-medium text-gray-600 mb-1">Library folder</label>
+      <select id="save-folder" class="prop-input mb-3"></select>
       <div id="save-existing-wrap" class="hidden mb-3">
         <label for="save-existing" class="block text-xs font-medium text-gray-600 mb-1">Overwrite an existing design</label>
         <select id="save-existing" class="prop-input">
@@ -1324,25 +1326,62 @@
     </div>
   </div>
 
-  <!-- Load Dialog -->
-  <div id="load-dialog" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-xl p-6 w-96 shadow-xl max-h-[80vh] flex flex-col">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Load Design</h3>
-      <div id="design-list" class="flex-1 overflow-y-auto mb-4 min-h-[100px]">
-        <div class="text-sm text-gray-400 text-center py-8">No saved designs</div>
+  <!-- Design library -->
+  <div id="load-dialog" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="library-title">
+    <section class="library-shell bg-white">
+      <header class="library-header">
+        <div><p class="library-eyebrow">YOUR LABEL COLLECTION</p><h2 id="library-title">Design library</h2><p>Find a favorite. Make it yours again.</p></div>
+        <button id="load-cancel" class="library-close" aria-label="Close library">×</button>
+      </header>
+      <div class="library-body">
+        <aside class="library-sidebar">
+          <h3>FOLDERS</h3>
+          <nav id="library-tree" aria-label="Library folders"></nav>
+          <p class="library-local-note">Saved in this browser.<br>Export JSON files to back up your designs or use them elsewhere.</p>
+        </aside>
+        <div class="library-main">
+          <nav class="library-locations" aria-label="Library sections">
+            <button id="library-location-root" type="button">Library root</button>
+            <button id="library-location-history" type="button">Previously printed</button>
+          </nav>
+          <nav id="library-breadcrumb" aria-label="Folder path"></nav>
+          <div class="library-heading">
+            <div><h3 id="library-folder-title"></h3><p id="library-count"></p></div>
+            <button id="library-organize-folder" class="library-secondary" hidden>Move / rename folder</button>
+          </div>
+          <div class="library-toolbar">
+            <button id="library-save-current" class="library-primary">＋ Save current design</button>
+            <button id="library-new-folder" class="library-secondary">＋ New folder</button>
+            <button id="import-file-btn" class="library-secondary">Import JSON</button>
+            <input type="file" id="import-file-input" class="hidden" accept=".json,application/json">
+          </div>
+          <div class="library-filters">
+            <input id="library-search" type="search" placeholder="Search this folder…" aria-label="Search designs in this folder">
+            <select id="library-size-filter" aria-label="Filter by sticker size"><option value="">All sticker sizes</option></select>
+            <button id="library-current-size" class="library-secondary" title="Filter to the sticker size selected in the editor">Current size</button>
+          </div>
+          <p id="library-error" role="alert"></p>
+          <p id="library-drag-hint" class="library-drag-hint">Drag a design onto a folder to move it, or use Move / rename.</p>
+          <p id="library-notice" role="status" aria-live="polite"></p>
+          <div id="design-list" class="library-grid"></div>
+        </div>
       </div>
-      <div class="border-t border-gray-200 pt-4 mb-4">
-        <p class="text-xs text-gray-500 mb-2">Or import from file:</p>
-        <button id="import-file-btn" class="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm flex items-center justify-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-          Import from File
-        </button>
-        <input type="file" id="import-file-input" class="hidden" accept=".json,application/json">
+    </section>
+  </div>
+
+  <div id="library-edit-dialog" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="library-edit-title">
+    <form id="library-edit-form" class="bg-white rounded-xl p-6 shadow-xl">
+      <h3 id="library-edit-title" class="text-lg font-semibold mb-4">New folder</h3>
+      <label for="library-edit-name" class="block text-xs font-medium mb-1">Name</label>
+      <input id="library-edit-name" class="prop-input mb-3" required maxlength="160" autocomplete="off">
+      <label for="library-edit-parent" class="block text-xs font-medium mb-1">Folder</label>
+      <select id="library-edit-parent" class="prop-input"></select>
+      <p id="library-edit-error" role="alert"></p>
+      <div class="library-toolbar">
+        <button id="library-edit-cancel" type="button" class="library-secondary">Cancel</button>
+        <button type="submit" id="library-edit-confirm" class="library-primary">Save</button>
       </div>
-      <div class="flex gap-2">
-        <button id="load-cancel" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-      </div>
-    </div>
+    </form>
   </div>
 
   <!-- Printer Info Popup -->
@@ -2155,19 +2194,19 @@
             <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
             </svg>
-            Save Design
+            Save to library
           </button>
           <button id="mobile-save-as-btn" class="w-full px-3 py-2.5 text-left text-sm hover:bg-gray-100 active:bg-gray-200 rounded-lg flex items-center gap-3">
             <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V5a2 2 0 012-2h7l4 4v10a2 2 0 01-2 2h-2M5 8h7l4 4v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-9a2 2 0 012-2z"/>
             </svg>
-            Save As
+            Save a copy
           </button>
           <button id="mobile-load-btn" class="w-full px-3 py-2.5 text-left text-sm hover:bg-gray-100 active:bg-gray-200 rounded-lg flex items-center gap-3">
             <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
             </svg>
-            Load Design
+            Design library
           </button>
           <button id="mobile-export-json-btn" class="w-full px-3 py-2.5 text-left text-sm hover:bg-gray-100 active:bg-gray-200 rounded-lg flex items-center gap-3">
             <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2332,7 +2371,7 @@
     pdfjsModule.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
     window.pdfjsLib = pdfjsModule;
   </script>
-  <script type="module" src="app.js?v=176"></script>
+  <script type="module" src="app.js?v=180"></script>
   <script>
     // Show body once styles are ready
     requestAnimationFrame(() => {
