@@ -1,10 +1,10 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v181
+ * v182
  */
 
-import { CanvasRenderer } from './canvas.js?v=125';
+import { CanvasRenderer } from './canvas.js?v=126';
 import { normalizeTextDirection } from './utils/text-direction.js';
 import { BLETransport } from './ble.js?v=104';
 import { USBTransport } from './usb.js?v=101';
@@ -63,7 +63,7 @@ import {
   recordPrintedDesign,
   PRINT_HISTORY_FOLDER,
 } from './storage.js?v=108';
-import { DesignLibrary } from './design-library.js?v=5';
+import { DesignLibrary } from './design-library.js?v=6';
 import {
   extractFields,
   hasTemplateFields,

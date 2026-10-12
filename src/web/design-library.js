@@ -1,4 +1,4 @@
-import { CanvasRenderer } from './canvas.js?v=125';
+import { CanvasRenderer } from './canvas.js?v=126';
 import { listDesigns, loadDesign, deleteDesign, listFolders, saveFolder, deleteFolder, organizeDesign, folderPath, exportDesign, PRINT_HISTORY_FOLDER, PRINT_HISTORY_LIMIT } from './storage.js?v=108';
 import { evaluateExpressions, substituteFields } from './templates.js?v=102';
 

@@ -664,10 +664,16 @@ export class CanvasRenderer {
             ? groupMembers.map(e => this.getOffsetElement(e))
             : groupMembers;
           const bounds = this.getMultiElementBounds(offsetMembers);
-          if (bounds && !groupMembers.some(element => element.pinned)) {
-            drawGroupHandles(ctx, bounds);
+          if (bounds) {
+            if (groupMembers.some(element => element.pinned)) {
+              if (!this.ditherPreview) this.drawPinnedSelection(bounds);
+            } else {
+              drawGroupHandles(ctx, bounds);
+            }
           }
-        } else if (!selected.mirrorSourceId && !selected.pinned) {
+        } else if (selected.pinned) {
+          if (!this.ditherPreview) this.drawPinnedSelection(handleElement);
+        } else if (!selected.mirrorSourceId) {
           // Single ungrouped element
           drawHandles(ctx, handleElement);
         }
@@ -679,8 +685,12 @@ export class CanvasRenderer {
         ? selectedElements.map(e => this.getOffsetElement(e))
         : selectedElements;
       const bounds = this.getMultiElementBounds(offsetElements);
-      if (bounds && !selectedElements.some(element => element.pinned)) {
-        drawGroupHandles(ctx, bounds);
+      if (bounds) {
+        if (selectedElements.some(element => element.pinned)) {
+          if (!this.ditherPreview) this.drawPinnedSelection(bounds);
+        } else {
+          drawGroupHandles(ctx, bounds);
+        }
       }
     }
 
@@ -784,6 +794,22 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    ctx.restore();
+  }
+
+  /** Show locked selection without suggesting resize or rotation is available. */
+  drawPinnedSelection({ x, y, width, height, rotation = 0 }) {
+    const ctx = this.ctx;
+    const padding = 3 / this.zoom;
+    ctx.save();
+    ctx.translate(x + width / 2, y + height / 2);
+    ctx.rotate(rotation * Math.PI / 180);
+    ctx.globalAlpha = 0.65;
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 1.5 / this.zoom;
+    ctx.setLineDash([5 / this.zoom, 3 / this.zoom]);
+    ctx.strokeRect(-width / 2 - padding, -height / 2 - padding,
+      width + padding * 2, height + padding * 2);
     ctx.restore();
   }
 
