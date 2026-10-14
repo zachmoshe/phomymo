@@ -245,6 +245,25 @@ body.app-shell {
   box-shadow: 0 0 0 4px rgba(152, 162, 179, 0.12);
 }
 
+#status-dot.printer-battery-low,
+#mobile-status-dot.printer-battery-low {
+  background-color: #ef4444 !important;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18);
+  animation: printer-battery-blink 1.4s ease-in-out infinite;
+}
+
+@keyframes printer-battery-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #status-dot.printer-battery-low,
+  #mobile-status-dot.printer-battery-low {
+    animation: none;
+  }
+}
+
 #dither-preview-btn,
 #print-settings-btn,
 #printer-info-btn {

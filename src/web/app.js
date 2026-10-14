@@ -1,7 +1,7 @@
 /**
  * Phomymo Label Designer Application
  * Multi-element label editor with drag, resize, and rotate
- * v182
+ * v183
  */
 
 import { CanvasRenderer } from './canvas.js?v=126';
@@ -707,6 +707,8 @@ function updateConnectionStatus(connected) {
   const mobileConnectBtn = $('#mobile-connect-btn');
   const mobileDisconnectBtn = $('#mobile-disconnect-btn');
 
+  updateBatteryIndicator(null, connected);
+
   dot.classList.toggle('bg-green-500', connected);
   dot.classList.toggle('bg-gray-400', !connected);
 
@@ -752,6 +754,24 @@ function updateConnectionStatus(connected) {
   }
 }
 
+/** Keep the header warning in sync with live battery reports. */
+function updateBatteryIndicator(battery, connected = state.transport?.isConnected?.() === true) {
+  const known = Number.isFinite(battery) && battery >= 0 && battery <= 100;
+  const low = connected && known && battery < 30;
+  const description = !connected ? 'Printer disconnected'
+    : low ? `Low printer battery (${battery}%) — please charge`
+      : known ? `Printer connected — battery ${battery}%` : 'Printer connected';
+  for (const id of ['#status-dot', '#mobile-status-dot']) {
+    const dot = $(id);
+    if (!dot) continue;
+    dot.classList.toggle('printer-battery-low', low);
+    dot.title = description;
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('aria-label', description);
+  }
+  $('#printer-info-btn').title = low ? description : 'Printer Info';
+}
+
 /**
  * Update printer info UI with current data
  */
@@ -770,6 +790,7 @@ function updatePrinterInfoUI(deviceName, printerModel) {
 
   // Update summary in button
   const battery = state.transport?.printerInfo?.battery;
+  updateBatteryIndicator(battery);
   const summaryParts = [];
   if (getMatchedPattern(deviceName)) {
     summaryParts.push(getMatchedPattern(deviceName));
@@ -799,14 +820,13 @@ function updatePrinterInfoFromQuery(field, value, allInfo) {
       $('#pi-battery-text').textContent = value !== null ? `${value}%` : '--';
       // Update icon color based on level
       const icon = $('#pi-battery-icon');
-      if (value !== null) {
-        if (value <= 10) icon.classList.replace('text-gray-400', 'text-red-500');
-        else if (value <= 30) icon.classList.replace('text-gray-400', 'text-yellow-500');
-        else icon.classList.replace('text-gray-400', 'text-green-500');
-      }
+      icon.classList.remove('text-gray-400', 'text-red-500', 'text-yellow-500', 'text-green-500');
+      icon.classList.add(!Number.isFinite(value) || value < 0 || value > 100
+        ? 'text-gray-400' : value < 30 ? 'text-red-500' : 'text-green-500');
       // Update summary
       const deviceName = state.transport?.getDeviceName?.() || '';
       updatePrinterInfoUI(deviceName, state.printSettings.printerModel);
+      updateBatteryIndicator(value);
       break;
     case 'paper':
       // Use icon prefix for accessibility (not just color)
